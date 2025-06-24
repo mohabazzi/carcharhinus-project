@@ -1091,7 +1091,7 @@ extinction_results <-
   mutate(extinction = factor(extinction, levels = c("remove_4","remove_12","remove_22","remove_26"))) |> 
   as.data.frame()
 
-# Compute summary statistics based on PC1 and PC2.
+# Compute summary statistics based on PC1 and PC2..
 first_axis <- 
   extinction_results |> 
   group_by(extinction) |> 
