@@ -26,8 +26,6 @@ Larger assets can be accessed from within a report using
 require(piggyback)
 
 # Create temporary directory and load .Rdata into R environment,
-pb_download(file = "default.RData",dest = tempdir(),repo = "mohabazzi/AptianShark",tag = "v.01")
+pb_download(file = "default.RData",dest = tempdir(),repo = "mohabazzi/carcharhinus-project",tag = "v.01")
 load(file = file.path(tempdir(),"default.RData"))
 ```
-
-[data](/data) contains all data file analysed in this study.
