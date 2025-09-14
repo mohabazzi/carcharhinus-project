@@ -1,0 +1,1928 @@
+---
+title: "Extinction Threatens to Cause Morphological and Ecological Homogenization in Sharks"
+title-block-banner: "#2E2D29"
+title-block-banner-color: "#FFFFFF"
+subtitle: "Supplementary Data:"
+description: "Stanford Doer School of Sustainability, Paleobiology Lab"
+date: last-modified
+date-format: "YYYY-MM-DD"
+mainfont: Figtree
+sansfont: Georgia
+footnotes-hover: true
+reference-location: margin
+lang: en
+number-sections: false
+crossref:
+  chapters: true
+author:
+  - name: Mohamad Bazzi
+    orcid: 0000-0002-9495-0781
+    email: bazzi@stanford.edu
+    url: https://github.com/mohabazzi
+    affiliations:
+      - name: Stanford University
+        department: Department of Earth and Planetary Sciences
+        address: CA 94305
+        country: USA
+        url: https://sustainability.stanford.edu/
+highlight-style: github
+fig-cap-location: top
+lightbox: auto
+format:
+  stanford-quarto-html: default
+other-links:
+  - text: Custom Quarto Template
+    icon: file-code
+    href: https://github.com/mohabazzi/stanford-quarto
+  - text: Zenado
+    icon: file-code
+    href: https://doi.org/10.5281/zenodo.17109671
+code-links:
+  - text: Github Repo
+    icon: github
+    href: https://github.com/mohabazzi/carcharhinus-project
+bibliography: references.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+::: {#call1 .callout-note appearance="simple"}
+## Reproducibility statement
+
+This Quarto report accompanies the manuscript **Extinction Threatens to Cause Morphological and Ecological Homogenization in Sharks** submitted to **Science Advances**. It contains the full R code and analyses used to generate the results in the paper. All analyses were conducted in R version 4.5.1 with Quarto.
+
+**Authors:** Mohamad Bazzi, Warwick L. Lloyd, Jun A. Ebersole, Phillip C. Sternes, Jood A. Al Aswad, and Jonathan L. Payne
+:::
+
+## Packages
+
+```{r message=FALSE, warning=FALSE, results='hide', echo=FALSE}
+R.packages <- c("geomorph openxlsx dplyr ggplot2 phytools geiger phangorn tibble geometry
+                 colorspace compositions Momocs ggpubr ordiBreadth tidyr akima Hmisc ggpointdensity
+                 boot broom rredlist treemap ggrepel dispRity fields abind forcats ggtern")
+
+import_packages <- 
+  function(x)
+  x |> trimws() |> strsplit("\\s+") |> unlist() |> 
+  lapply(function(x) library(x, character.only = T))
+
+R.packages |> import_packages()
+
+# Custom functions.
+intervals <- function(xvar,alpha = 0.975) {
+  mean <- mean(xvar,na.rm = TRUE)
+  std <- sd(xvar,na.rm = TRUE)
+  n <- length(na.omit(xvar))
+  ci.s.x <- sqrt((std^2)/n)
+  pi.s.x <- std*sqrt(1 + 1/n)
+  t <- qt(alpha,df = n - 1)
+  ci.uci <- mean + t*ci.s.x
+  ci.lci <- mean - t*ci.s.x
+  pi.uci <- mean + t*pi.s.x
+  pi.lci <- mean - t*pi.s.x
+  res <- as.list(c(round(mean,4),round(std,4),n,round(t,4),round(ci.lci,4),round(ci.uci,4),round(pi.lci,4),round(pi.uci,4)))
+  names(res) <- c('mean','st.dev','N','t.stat','Lower.CI','Upper.CI','Lower.PI','Upper.PI')
+  return(res)
+}
+```
+
+## Data
+
+**Summary:** A total of 1235 specimens from 30 species were digitized. For 14 species, we managed to sample tooth shapes from two individuals: allowing for some intraspecific variability. Occurrences of *C. wheeleri* were omitted because of uncertain taxonomy. Remaining species included basic information about capture sites and total length, with the exception of *Carcharhinus tilstoni*.
+
+```{r message=FALSE}
+# Morphometric dataset.
+Data <-
+  read.xlsx(xlsxFile = "Carcharhinus.xlsx") |> 
+  mutate(File.Type = ".png") |> 
+  # Remove C. wheeleri.
+  filter(Species != "Carcharhinus wheeleri") |> 
+  filter(Used == "x") # 1256 specimens after removing C. wheeleri.
+
+rownames(Data) <- paste(Data$File_Name,Data$File.Type,sep = "")
+
+# Number of species.
+carcharhinus_species <- unique(Data$Species)
+
+# Habitat and IUCN information.
+Traits <- read.xlsx(xlsxFile = "Traits.xlsx")
+
+Traits |>
+  mutate(Size_Subclass = gsub("_shark","",Size_Subclass)) |> 
+  mutate(Size_Subclass = case_when(Size_Subclass == "small" ~ "small (<150 cm)",
+                                   Size_Subclass == "medium" ~ "medium (150–300 cm)",
+                                   Size_Subclass == "large" ~ "large (>300 cm)", T  ~ Size_Subclass)) |> 
+  mutate("Body Size" = Size_Subclass) |> 
+  mutate(IUCN = factor(IUCN, levels = c("CR", "EN", "VU", "NT", "LC"))) |> 
+  group_by(`Body Size`, IUCN, Sorensen_habitat) |> 
+  count() |> 
+  ggplot(aes(x = IUCN, y = n, fill = `Body Size`)) +
+  geom_bar(stat = "identity", colour = "#333F48FF") +
+  scale_fill_manual(values =  c("#333F48FF","#C6AA76FF","#BA0C2FFF")) +  
+  labs(y = "Number of species", x = "IUCN Status", color = "Size Subclass", 
+       caption = "IUCN Source: www.iucnredlist.org/") +
+  facet_wrap(~Sorensen_habitat, scales = "free") +
+  theme_bw() +
+  theme(axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold"),
+        axis.text.y = element_text(angle = 90,hjust = 1),
+        legend.title = element_text(face = "bold"),
+        strip.text = element_text(face = "bold"),
+        aspect.ratio = 1.5) 
+
+# Coastal pelagic and large body size (>300 cm TL) would largely disappear if threatened taxa (CR, EN and VU) went extinct. C. galapagensis is globally LC and the only large-bodided, reef-associated species in this genus, that would not be affected. 
+
+# Proportions of species in each IUCN category?
+
+# prop.table(table(Traits$IUCN)) |> 
+#   as.data.frame() |> 
+#   setNames(nm = c("IUCN","Proportion")) |> 
+#   ggplot(mapping = aes(x = IUCN, y = Proportion)) +
+#   geom_col() +
+#   coord_flip() +
+#   theme(aspect.ratio = 1)
+
+# Carcharhinidae species profiles.
+carcharhinidae <- read.csv2(file = "Carcharhinidae.csv",header = T)
+# Plot.
+carcharhinidae |>
+  mutate(IUCN = factor(IUCN, levels = c("Critically Endangered","Endangered","Vulnerable","Near Threatened","Least Concern","Data Deficient"))) |> 
+  group_by(Genus,IUCN) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Genus, y = n, fill = IUCN)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values  = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50","#9E9E9E")) +
+  scale_color_manual(values = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50","#9E9E9E")) +
+  labs(x = "Genus", y = "Number of species", colour = "IUCN", 
+       title = "Carcharhinidae",subtitle = "Threat status of Requiem sharks",
+       caption = "Taxonomic and IUCN data from: www.iucnredlist.org/") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1,vjust = 1),
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"),
+        aspect.ratio = 1) # How many species of Carcharhinus?
+
+# Compare sampled taxa against the maximum size of each species (max-values are from Ebert et al. 2024).
+Traits |>
+  select(Species,Max_Body_Size_Ebert_CM) |> 
+  mutate(Species = paste("Carcharhinus",Species)) |> 
+  rename("Size" = 2) |> 
+  ggplot(mapping = aes(x = Species, y = Size)) +
+  geom_segment(aes(y = 0,yend = Size)) +
+  geom_point(shape = 21, size = 6, fill = "#4a4e4d") +
+  # Sampled specimens with tooth morphology.
+  geom_point(data = 
+               Data |> 
+               group_by(Species,Source) |>
+               # Carcharhinus tilstoni lacks TL information.
+               filter(Species != "Carcharhinus tilstoni") |> 
+               summarise(max_size = max(TL,na.rm = T),min_size = min(TL,na.rm = T)) |> 
+               pivot_longer(cols = c(3:4),values_to = "Size") |> 
+               select(-3),mapping = aes(x = Species,y = Size, colour = Source),size = 3) +
+  scale_fill_manual(values  = c("#762a83","#009688")) +
+  scale_color_manual(values = c("#762a83","#009688")) +
+  coord_flip() +
+  labs(x = NULL,
+       y = "Body Size (cm)",
+       title = "Maximum Potential Size vs. Observed Size",
+       subtitle = "Individual-based size ranges compared with published maximums") +
+  theme_bw() +
+  theme(panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8, face = "italic"),
+        axis.title = element_text(face = "bold",size = 10),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        strip.text = element_text(face = "bold"),
+        plot.title = element_text(face = "bold",size = 10),
+        plot.subtitle = element_text(size = 10),
+        aspect.ratio = 2)
+```
+
+## Landmark data
+
+```{r}
+# Custom function.
+read2Dtps.noLMs <- function(file, ncurve, divide.curve = TRUE, curve.1.pts = NULL, curve.2.pts = NULL, 
+                            plot = FALSE, tooth = NULL, makeSliders = TRUE, scale = FALSE) {
+  require(sp)
+  ignore.case = TRUE
+  tpsfile <- scan(file, what = "char", sep = "\n", quiet = TRUE)
+  scale.lines <- grep("SCALE=", tpsfile, ignore.case)
+  lm.lines <- grep("LM=", tpsfile, ignore.case)
+  n <- nspecs <- length(lm.lines)
+  k <- 2
+  final.results <- vector('list', 5)
+  names(final.results) <- c('rawLMs', 'points.curve', 'spacedLMs', 'coords', 'sliders')
+  labels <- tpsfile[grep("IMAGE=", tpsfile, ignore.case)]
+  raw.LM <- vector('list', n); names(raw.LM) <- sub("IMAGE=", "", labels)
+  spaced.LM <- vector('list', n); names(spaced.LM) <- sub("IMAGE=", "", labels)
+  num.points <- matrix(, nrow = n, ncol = k) 
+
+  for (i in 1:n) {
+    # parse out specimens
+    if (i < n) sp <- tpsfile[lm.lines[i]:(lm.lines[i+1] - 1)]
+    else sp <- tpsfile[tail(lm.lines, n = 1):length(tpsfile)]
+    
+    # locate curve lines
+    curvepts <- grep("POINTS=", sp, ignore.case = TRUE)
+    print(paste("Specimen", i, "- POINTS= lines found:", length(curvepts)))
+    print(sp[curvepts])  # Show the actual POINTS= lines
+
+    if (length(curvepts) != ncurve) {
+      stop(paste("Specimen", i, "does not have the expected", ncurve, "curves. Found:", length(curvepts)))
+    }
+
+    ncurvepts <- as.numeric(sub("POINTS=", "", sp[curvepts], ignore.case = TRUE))
+    print(paste("Specimen", i, "- Curve point counts:", paste(ncurvepts, collapse = ", ")))
+    
+    num.points[i, ] <- ncurvepts
+    raw.curvepts <- vector('list', 2)
+    
+    if (divide.curve == TRUE) {
+      spaced.curvepts <- vector('list', 2)
+      for (j in 1:ncurve) {
+        # parse out curves
+        curve <- sp[(curvepts[j] + 1):(curvepts[j] + ncurvepts[j])]
+        curve <- matrix(as.numeric(unlist(strsplit(curve, "\\s+"))), ncol = k, byrow = TRUE)
+        raw.curvepts[[j]] <- curve
+        if (j == 1) {
+          L.lands <- Line(curve)
+          semi.lands <- spsample(L.lands, curve.1.pts, type = "regular", offset = c(0,1))@coords
+          spaced.curvepts[[j]] <- semi.lands
+        }
+        if (j == 2) {
+          curve <- curve[ncurvepts[j]:1, ]
+          L.lands <- Line(curve)
+          semi.lands <- spsample(L.lands, curve.2.pts - 1, type = "regular", offset = c(0,1))@coords
+          spaced.curvepts[[j]] <- rbind(semi.lands, curve[ncurvepts[j], ])
+        }
+      }
+      spaced.LM[[i]] <- rbind(spaced.curvepts[[1]], spaced.curvepts[[2]])
+      raw.LM[[i]] <- rbind(raw.curvepts[[1]], raw.curvepts[[2]][-1, ])
+      p <- nrow(rbind(spaced.curvepts[[1]], spaced.curvepts[[2]]))
+    }
+
+    if (divide.curve == FALSE) {
+      for (j in 1:ncurve) {
+        curve <- sp[(curvepts[j] + 1):(curvepts[j] + ncurvepts[j])]
+        curve <- matrix(as.numeric(unlist(strsplit(curve, "\\s+"))), ncol = k, byrow = TRUE)
+        raw.curvepts[[j]] <- curve
+      }
+      L.lands <- Line(rbind(raw.curvepts[[1]], raw.curvepts[[2]][-1, ]))
+      semi.lands <- spsample(L.lands, curve.1.pts, type = "regular")@coords
+      spaced.LM[[i]] <- semi.lands
+      raw.LM[[i]] <- rbind(raw.curvepts[[1]], raw.curvepts[[2]][-1, ])
+      p <- curve.1.pts
+    }
+  }
+
+  coords <- array(unlist(spaced.LM), c(p, k, n), dimnames = list(NULL, NULL, names(spaced.LM)))
+
+  if (scale) {
+    imscale <- as.numeric(sub("SCALE=", "", tpsfile[grep("SCALE", tpsfile, ignore.case)], ignore.case))
+    imscale <- aperm(array(rep(imscale, p * k), c(n, k, p)), c(3, 2, 1))
+    coords <- coords * imscale
+  }
+
+  final.results$rawLMs <- raw.LM
+  final.results$points.curve <- num.points
+  final.results$spacedLMs <- spaced.LM
+  final.results$coords <- coords
+
+  if (plot == TRUE) {
+    par(mfrow = c(1, 2))
+    plot(raw.LM[[tooth]], xlab = NA, ylab = NA, main = "Digitized Points")
+    plot(coords[,,tooth], xlab = NA, ylab = NA, main = "Resampled & Scaled Points")
+  }
+
+  if (makeSliders == TRUE) {
+    final.results$sliders <- data.frame(before = 1:(p-2), slider = 2:(p-1), after = 3:p)
+  }
+
+  return(final.results)
+}
+```
+
+<!--Import shape data-->
+
+```{r results='hide',echo=TRUE,message=FALSE,warning=FALSE}
+# Landmark data.
+LMs_vogit_weber <- read2Dtps.noLMs(file = "Images/landmarks.TPS", ncurve = 2,
+                                   divide.curve = TRUE,
+                                   curve.1.pts = 80, curve.2.pts = 80,
+                                   scale = TRUE)
+
+# Additional landmark data from digitized images sampled from Bass 1973 (13 species).
+LMs_bass <- read2Dtps.noLMs(file = "Bass Images/bass_images.TPS", ncurve = 2,
+                            divide.curve = TRUE,
+                            curve.1.pts = 80, curve.2.pts = 80,
+                            scale = TRUE)
+
+# Combine both arrays.
+LMs <- abind(LMs_vogit_weber$coords,LMs_bass$coords)
+```
+
+## Phylogeny
+
+```{r}
+# MCC tree of sharks.
+tree <- readNexus(file = "Phylogeny/mcc_tree.nex")
+
+species_tips <- 
+  as.data.frame(grep("Carcharhinus",tree$tip.label,value = T)) |> 
+  setNames(nm = "species") |> 
+  filter(species %in% gsub(" ","_",carcharhinus_species)) |>
+  column_to_rownames(var = "species") # 30 species.
+
+carcharhinus_tree <- treedata(phy = tree,data = species_tips, warnings = FALSE)$phy
+
+# Carcharhinidae tree.
+carcharhinidae_tree <- treedata(phy = tree,
+                                data = carcharhinidae |> mutate(Species = gsub(" ","_",Species)) |> column_to_rownames(var = "Species"),
+                                warnings = FALSE)$phy
+
+# plotTree(ladderize(carcharhinidae_tree),ftype="i",lwd=1,tip.label=TRUE,fsize=.5, edge.color = "black")
+plotTree(ladderize(carcharhinus_tree),fsize = .8)
+
+# Fully Resolved Trees (Stein et al. 2018).
+fully_resolved_tree <- readNexus(file = "Phylogeny/10.cal.tree.nex")
+
+# The calibrated tree (Marion et al. )
+marion_et_al_2024 <- readNexus(file = "Phylogeny/16FC_16C_374_sp.tree") 
+marion_et_al_2024$tip.label[69]  <- "Carcharhinus_perezii"
+marion_et_al_2024_pruned <- treedata(phy = marion_et_al_2024,data = species_tips, warnings = FALSE)$phy # 27 Carcharhinus species.
+```
+
+## Diets and niche breadth
+
+Diets for *Carcharhinus leiodon*, *Carcharhinus hemiodon* and *Carcharhinus borneensis* were not included in the dataset by [@Cortes1999].
+
+```{r}
+# Diets.
+Diets <- read.xlsx(xlsxFile = "Diets.xlsx")
+rownames(Diets) <- paste(Diets$Genus,Diets$Species,sep = "_")
+
+Diets$IUCN_2024 <- factor(Diets$IUCN_2024, levels = c("CR","EN","VU","NT","LC"))
+
+# Subset tree.
+tree_diets <- geiger::treedata(phy = carcharhinus_tree,data = Diets, warnings = FALSE)$phy # 27 species with diet and tree availability.
+
+# Plot.
+graphics::layout(matrix(1:1,nrow = 1),respect = T)
+
+phylo.heatmap(tree = tree_diets, X = Diets[,6:15], standardize = F,
+              colors = rev(sequential_hcl(11,palette = "Red-Yellow")),split=c(0.6,0.4),
+              fsize = .5) # Overwhelming fish-eaters across the board.
+
+# Compositional diets.
+closed_diets <- clo(X = Diets[,6:15])
+
+# Convert to binary matrix.
+binary_niche <- 
+  Diets |>
+  select(6:15) |> 
+  mutate(across(everything(), ~ ./100)) |> 
+  mutate_all(~ ifelse(. == 0.0000000000, 0, 1))
+```
+
+<!-- Niche breadth analysis-->
+
+[@Fordyce2016] proposed an index of host-range (or ordinated diet breadth) based on observed associations between prey and consumer. Here we compute the ODB value of 27 _Carcharhinus_ species. Results from this analysis are provided in the @eco-div section.
+
+```{r warning=FALSE, message=FALSE}
+# Ordinated diet breadth (ODB) analysis.
+odb <- ordi.breadth(dat = binary_niche,dist.method = "jaccard")
+
+# par(mfrow = c(6,5))
+# for(i in 1:27) {
+#   dist.group.plot(specialization = odb,id = i,cex = 1,verbose = F)  
+# }
+
+# Data frame.
+odb_results <- 
+  data.frame(Axis = odb$tot.breadth, Index = 1:27,
+             Species = odb$species,
+             Genera = gsub("_.+$","", odb$species)
+             )
+
+odb_results <-
+  odb_results |> 
+  left_join(Traits |> mutate(Species = as.factor(paste(Genus,Species, sep = "_"))) |> 
+              select(Species,IUCN,Habitat,Secondary_Habitat,Size_Subclass,Ecomorphotype,Sorensen_habitat), by = "Species"
+            ) # 27 species.
+
+odb_results <-
+  odb_results |> 
+  as.data.frame() |> 
+  mutate(IUCN = factor(IUCN, levels = c("CR","EN","VU","NT","LC"))) |> 
+  mutate(Size_Subclass = factor(Size_Subclass, levels = c("small_shark","medium_shark","large_shark")))
+
+# IUCN colours.
+iucn_categories <- factor(setNames(Diets$IUCN_2024, paste(Diets$Genus,Diets$Species, sep = "_")))
+iucn_cols <- setNames(c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50"), 
+                      levels(iucn_categories))
+
+# Plot.
+p1 <-
+  odb_results |> 
+  mutate(abbreviated_species = Species) |> 
+  mutate(abbreviated_species = gsub("Carcharhinus_","C. ",abbreviated_species)) |> 
+  ggplot(mapping = aes(x = Index, y = Axis, size = Size_Subclass,colour = IUCN, shape = Sorensen_habitat)) +
+  geom_point() +
+  scale_fill_manual(values  = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  scale_color_manual(values = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  scale_x_continuous(limits = c(0,30)) +
+  labs(x = "Species", y = "Total diet breadth", colour = "IUCN", size = "Body size class",shape = "Habitat") +
+  # Quantiles.
+  geom_hline(yintercept = c(quantile(odb_results$Axis, c(0.33, 0.66))), 
+           linetype = "dashed",linewidth = 1, color = "grey50") +
+  annotate("text", x = 0.5, y = quantile(odb_results$Axis, 0.15), 
+         label = "Specialist", hjust = 0) +
+  annotate("text", x = 0.5, y = quantile(odb_results$Axis, 0.85), 
+         label = "Generalist", hjust = 0) +
+  theme_bw() +
+  theme(axis.title = element_text(face = "bold"),
+         legend.position = "right",
+         aspect.ratio = 1)
+
+# p1 |> print()
+
+# Raw diets.
+p2 <- 
+  Diets |>
+  select(6:15,21) |> 
+  as.data.frame() |> 
+  rownames_to_column(var = "taxa") |> 
+  mutate(taxa = gsub("_"," ", taxa),
+         taxa = gsub("Carcharhinus","C.", taxa)) |> 
+  reshape::melt() |> 
+  ggplot(aes(x= "", y=value, fill=variable)) +
+  geom_bar(stat="identity", width=.01, color="black") +
+  scale_fill_manual(values = colorspace::qualitative_hcl(n = 10,palette = "Dark 3")) +
+  labs(fill = NULL) +
+  coord_polar("y", start=0) +
+  theme_void() +
+  facet_wrap(.~taxa + IUCN_2024 ) +
+  theme(plot.title = element_text(size = 8),
+        strip.text = element_text(size = 8,face = "italic"))
+
+p2 |> print()
+```
+
+## Procrustes superimposition
+
+```{r message=FALSE}
+# Slider file.
+slider_file <-
+  rbind(define.sliders(c(1,2:79,80)),
+        define.sliders(c(80,81:159,160))
+        )
+
+# Procrustes superimposition.
+tooth_gpa <- gpagen(A = LMs[,,rownames(Data)],curves = slider_file,
+                    approxBE = T,
+                    Proj = T,
+                    print.progress = F,PrinAxes = T) # Without C. wheeleri.
+
+plot(tooth_gpa)
+
+centroid_size <- tooth_gpa$Csize
+
+# tooth_gpa$coords |> dim() # 1256 specimens.
+```
+
+__A general overview of the analyzed morphometric data is highlighted here.__
+
+```{r}
+# Sample size per species.
+p3 <-
+  dimnames(tooth_gpa$coords)[[3]] |> 
+  as.data.frame() |>
+  setNames(nm = "Species") |> 
+  mutate(Source = NULL,
+         Source = as.factor(c(rep("Voigt and Weber 2011",874), rep("Bass 1973",382)))) |>
+  mutate(Source = relevel(x = Source,ref = 2)) |> 
+  mutate(Species = gsub("-"," ",Species)) |> 
+  mutate(Species = gsub("_.*","",Species)) |> 
+  group_by(Species, Source) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Species, y = n)) +
+  geom_col(fill = "#2E2D29") +
+  labs(x = NULL, y = "Sample size") +
+  coord_flip() +
+  facet_wrap(.~Source,scales = "free",ncol = 1) +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(face = "italic"),
+        strip.text = element_text(face = "bold"),
+        axis.title = element_text(face = "bold",size = 10))
+
+# p3 |> print()
+
+# Size.
+names(tooth_gpa$Csize) <- gsub(pattern = "_.*",replacement = "",x = names(tooth_gpa$Csize))
+
+# Upper versus Lower teeth.
+p4 <- 
+  Data |> 
+  mutate(Source = as.factor(Source)) |> 
+  mutate(Source = relevel(x = Source,ref = 2)) |> 
+  group_by(Species,Jaw, Source) |> 
+  count() |> 
+  ggplot(mapping = aes(x = Species,y = n, fill = Jaw)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(limits = c(0,60)) +
+  scale_fill_manual(values =   c("#2E2D29","#417865")) +
+  coord_flip() +
+  labs(x = NULL, y = "Sample size") +
+  facet_wrap(.~Source, scales = "free",ncol = 2) +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8, face = "italic"),
+        axis.title = element_text(face = "bold",size = 10),
+        legend.position = "top",
+        legend.title = element_text(face = "bold"),
+        strip.text = element_text(face = "bold"),
+        plot.title = element_text(face = "bold"),
+        aspect.ratio = 2.5)
+
+p4 |> print()
+
+species_sample <-
+  data.frame(species = names(tooth_gpa$Csize),
+             cz = as.vector(log10(tooth_gpa$Csize)),
+             Source = as.factor(c(rep("Voigt and Weber 2011",874), rep("Bass 1973",382)))) |> 
+  group_by(species,Source) |> 
+  count() |> 
+  mutate(LA = paste(species,"n=",n,sep = " ")) |> 
+  mutate(LA = gsub("= ","=",LA)) |> 
+  mutate(LA = gsub("n=","\nn=",LA)) |> 
+  mutate(LA = gsub("-"," ",LA))
+
+# label_vec <- setNames(species_sample$LA, gsub("-"," ",species_sample$species))
+
+p5 <-
+  data.frame(species = gsub("-"," ",names(tooth_gpa$Csize)),
+             cz = as.vector(log10(tooth_gpa$Csize)),
+             jaw = gsub(".*(_[LU]).*", "\\1", names(centroid_size)),
+             Source = as.factor(c(rep("Voigt and Weber 2011",874), rep("Bass 1973",382)))) |>
+  mutate(Source = relevel(x = Source,ref = 2)) |> 
+  mutate(jaw = gsub("_L", "Lower", jaw)) |> 
+  mutate(jaw = gsub("_U", "Upper", jaw)) |> 
+  ggplot(mapping = aes(x = cz, y = species, fill = jaw)) +
+  geom_boxplot() +
+  scale_fill_manual(values =    c("#2E2D29","#417865")) +
+  scale_color_manual(values =   c("#2E2D29","#417865")) +
+  labs(x = "Log-transformed centroid size",y = NULL, fill = "Jaw unit") +
+  facet_wrap(.~Source,scales = "free") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(face = "bold",size = 10),
+        strip.text = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"),
+        strip.text.x = element_text(size = 8),
+        legend.position = "none",
+        aspect.ratio = 2)
+  # scale_y_discrete(labels = label_vec)
+
+p5 |> print()
+```
+
+## Principal components analysis
+
+### Specimen level
+
+```{r}
+# PCA
+pca <- gm.prcomp(A = tooth_gpa$coords)
+
+# Variance explained.
+# round(unlist(pca$sdev^2/sum(pca$sdev^2))[1:4],digits = 4) * 100 # PC1 = 70.39%, PC2 = 15.77%, PC3 = 7.84%, PC4 = 1.59%
+
+pca_data <-
+  data.frame(PC1 = pca$x[,1],
+             PC2 = pca$x[,2],
+             PC3 = pca$x[,3],
+             Species = gsub("-"," ", x = gsub("_.*","",x = rownames(pca$x))),
+             Jaw = gsub("_L","Lower",gsub("_U","Upper", gsub(".*(_L|_U).*", "\\1", rownames(pca$x)))),
+             Serrations = setNames(Data$Serration,rownames(Data)),
+             cz = as.numeric(unname(tooth_gpa$Csize))
+             ) |> 
+  left_join(Traits |> 
+              mutate(Species = paste(Genus,Species,sep = " ")) |>
+              select(Species, IUCN, Habitat,Secondary_Habitat,Size_Subclass,Ecomorphotype,Sorensen_habitat),by = "Species") |> 
+  mutate(IUCN = factor(IUCN, levels = c("CR","EN","VU","NT","LC"))) |> 
+  # Adjust serration factor.
+  mutate(Serrations = stringr::str_squish(Serrations))
+
+rownames(pca_data) <- rownames(pca$x)
+
+# Species-averages.
+average_species <-
+  pca_data |> 
+  group_by(Species) |> 
+  summarise(PC1 = mean(PC1),PC2 = mean(PC2),PC3 = mean(PC3)) |> 
+  pivot_longer(cols = c(2:4),names_to = "variable")
+
+# Species
+specimen_axes <-
+  pca_data |> 
+  pivot_longer(cols = c(1:3),names_to = "variable")
+
+# Plot specimen level PCA.
+specimen_axes |>
+  ggplot(mapping = aes(x = Species, y = value, colour = Species)) +
+  geom_boxplot(colour = "#AD9490", fill = "#E2DED4",show.legend = F) +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar",width = .0, lwd = 1, linetype = 1, col = "#2E2D29") +
+  geom_point(mapping = aes(x = Species, y = value),data = average_species,size = 2,show.legend = F,
+             fill = "#FFFFFF", colour = "#2E2D29", shape = 21) +
+  geom_hline(yintercept = 0.0,linewidth = 1,linetype = 2,colour = "black") +
+  coord_flip() +
+  # Add IUCN status.
+  geom_point(data = specimen_axes |> filter(variable == "PC1") |> distinct(Species,IUCN,variable), 
+             aes(y = -0.5, x = Species, fill = IUCN), 
+             inherit.aes = FALSE,
+             shape = 21, colour = "#2E2D29", size = 3.5,
+             show.legend = F) +
+  # Custom colors.
+  scale_fill_manual(values  = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  facet_wrap(.~variable, scales = "free_x",
+             labeller = labeller(variable = c(
+               PC1 = "Principal Component 1 (70.39%)",
+               PC2 = "Principal Component 2 (15.77%)",
+               PC3 = "Principal Component 3 (7.84%)"))) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic",size = 8),
+        axis.text.x = element_text(size = 8),
+        aspect.ratio = 2,
+        panel.grid = element_blank(),
+        strip.text = element_text(face = "bold",size = 8))
+
+# Function to compute the modal value.
+estimate_mode <- function(x) {
+  d <- hist(x, plot = FALSE)
+  mode <- d$mids[which.max(d$counts)]
+  return(mode)
+}
+
+mode_iucn <-
+  pca_data |> 
+  group_by(IUCN) |> 
+  summarise(PC1 = estimate_mode(PC1),PC2 = estimate_mode(PC2))
+
+# Plot by jaw: PC1. ANOVA tables are required for these as well.
+p6 <-
+  pca_data |> 
+  ggplot(mapping = aes(x = Species, y = PC1, fill = Jaw)) +
+  geom_boxplot() +
+  scale_fill_manual(values =  c("#2E2D29","#417865")) +
+  scale_color_manual(values = c("#2E2D29","#417865")) +
+  geom_hline(yintercept = 0.0,linetype = 2) +
+  labs(y = "Principal Component 1 (70.39%)", x = NULL, title = "Morphospace occupation",subtitle = "Upper versus Lower Teeth") +
+  coord_flip() +
+  theme_bw() +
+  theme(aspect.ratio = 2,
+        panel.grid = element_blank(),
+        axis.title = element_text(face = "bold"),
+        legend.position = "none",
+        legend.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(face = "italic"))
+
+p6 |> print()
+
+# PC2.
+p7 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = Species, y = PC2, fill = Jaw)) +
+  geom_boxplot() +
+  scale_fill_manual(values =  c("#2E2D29","#417865")) +
+  scale_color_manual(values = c("#2E2D29","#417865")) +
+  geom_hline(yintercept = 0.0,linetype = 2) +
+  labs(y = "Principal Component 2 (15.77%)", x = NULL, title = "Morphospace occupation",subtitle = "Upper versus Lower Teeth") +
+  coord_flip() +
+  theme_bw() +
+  theme(aspect.ratio = 2,
+        panel.grid = element_blank(),
+        axis.title = element_text(face = "bold",size = 10),
+        legend.position = "none",
+        legend.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold",size = 12),
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(face = "italic"))
+
+p7 |> print()
+
+# IUCN
+p8 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = IUCN)) +
+  geom_point() +
+  scale_fill_manual(values  = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  scale_color_manual(values = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        legend.position = "right")
+
+p8 |> print()
+
+highlight_data <- 
+  pca_data |> 
+  group_by(IUCN) |> 
+  mutate(highlight_group = IUCN) |> 
+  ungroup()
+
+# Plot.
+p9 <- 
+  ggplot() +
+  geom_point(data = pca_data, aes(x = PC1, y = PC2),
+             colour = "#2E2D29", size = 1) +
+  geom_point(data = highlight_data, 
+             aes(x = PC1, y = PC2, colour = highlight_group), size = 2) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)") +
+  facet_wrap(~ highlight_group) +
+  scale_colour_manual(values = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(angle = 90,hjust = .5,vjust = .5),
+        axis.title = element_text(size = 10,face = "bold"),
+        aspect.ratio = 1)
+
+p9 |> print()
+
+# Jaws and serrations.
+p10 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Serrations)) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values = qualitative_hcl(n = 4,"Dark 3")) +
+  scale_colour_manual(values = qualitative_hcl(n = 4,"Dark 3")) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)", colour = "Serration Type") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.title = element_text(face = "bold"),
+        legend.position = "right",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+p10 |> print()
+
+# Ecomorphotypes.
+p11 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Ecomorphotype)) +
+  geom_point() +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values =   c("#7a1e47","#29505d")) +
+  scale_colour_manual(values = c("#7a1e47","#29505d")) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.title = element_text(face = "bold"),
+        legend.position = "right",
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+# p11 |> print()
+
+average_body_class <- 
+  pca_data |> 
+  group_by(Size_Subclass) |> 
+  summarise(PC1 = mean(PC1),PC2 = mean(PC2),PC3 = mean(PC3))
+
+p12 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Size_Subclass)) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_color_manual(values = c("#333F48FF","#C6AA76FF","#BA0C2FFF")) +
+  scale_fill_manual(values =  c("#333F48FF","#C6AA76FF","#BA0C2FFF")) +  
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)", colour = "Body size class") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+p12 |> print()
+
+# Main habitat.
+p13 <-
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Habitat)) +
+  geom_point() +
+  scale_fill_manual(values  = c("#007C92","#B83A4B")) +
+  scale_color_manual(values = c("#007C92","#B83A4B")) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+# p13 |> print()
+
+# Secondary habitat.
+p14 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Secondary_Habitat)) +
+  geom_point() +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_colour_manual(values = c("#FFC20A", "#0C7BDC")) +
+  scale_fill_manual(values =   c("#FFC20A", "#0C7BDC")) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+# p14 |> print()
+
+# Tertiary habitat.
+p15 <- 
+  pca_data |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = Sorensen_habitat)) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_fill_manual(values =   darken(col = c("#FEE08B", "#BEDCEB", "#FFA384"),amount = .3)) +
+  scale_colour_manual(values = darken(col = c("#FEE08B", "#BEDCEB", "#FFA384"),amount = .3)) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)", colour = "Habitat") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+p16   <- 
+  pca_data |> 
+  mutate(status = case_when(IUCN %in% c("CR","EN","VU") ~ "Threatened", T ~ "Not-threatened")) |> 
+  ggplot(mapping = aes(x = PC1, y = PC2, colour = status)) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  labs(x = "Principal Component 1 (70.39%)", y = "Principal Component 2 (15.77%)", colour = "Habitat") +
+  theme_bw() +
+  theme(aspect.ratio = 1,
+        panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        axis.text = element_text(size = 8),
+        axis.title = element_text(size = 8,face = "bold"))
+
+# p16 |> print()
+```
+
+<!--TPS grids -->
+
+```{r results='hide',echo=FALSE,fig.show='hide'}
+# Morphologies along PC-axes.
+par(mfrow = c(3,2))
+plotRefToTarget(pca$shapes$shapes.comp1$min,pca$shapes$shapes.comp1$min)
+plotRefToTarget(pca$shapes$shapes.comp1$max,pca$shapes$shapes.comp1$max)
+plotRefToTarget(pca$shapes$shapes.comp2$min,pca$shapes$shapes.comp2$min)
+plotRefToTarget(pca$shapes$shapes.comp2$max,pca$shapes$shapes.comp2$max)
+plotRefToTarget(pca$shapes$shapes.comp3$min,pca$shapes$shapes.comp3$min)
+plotRefToTarget(pca$shapes$shapes.comp3$max,pca$shapes$shapes.comp3$max)
+dev.off()
+```
+
+### Species level analysis
+
+<!-- Average morphology -->
+
+Are smaller, medium or larger species at more risk of extinction? Are threatened species living in extreme areas of morphospace?
+
+```{r}
+species_coords <- tooth_gpa$coords
+
+dimnames(species_coords)[[3]] <- gsub("-"," ",dimnames(species_coords)[[3]])
+dimnames(species_coords)[[3]] <- gsub("_.*", "",dimnames(species_coords)[[3]])
+dimnames(species_coords)[[3]] <- gsub(" ", "_",dimnames(species_coords)[[3]])
+
+# Computing an average shape.
+species_subset <- coords.subset(A = species_coords, group = as.factor(dimnames(species_coords)[[3]]))
+
+species_subset <- 
+  lapply(species_subset, mshape) |>
+  simplify2array()
+
+# Shape analysis via PCA.
+average_pca <- gm.prcomp(A = species_subset,phy = carcharhinus_tree)
+
+# Variance explained.
+# barplot(round(unlist(average_pca$sdev^2/sum(average_pca$sdev^2)),4)* 100,las = 2,horiz = F,ylab = "Variance Explained")
+# dev.off()
+
+# Plot tps grids.
+layout(matrix(1:4,nrow = 2,byrow = T),respect = T)
+
+plotRefToTarget(average_pca$shapes$shapes.comp1$min,average_pca$shapes$shapes.comp1$min)
+plotRefToTarget(average_pca$shapes$shapes.comp1$max,average_pca$shapes$shapes.comp1$max)
+plotRefToTarget(average_pca$shapes$shapes.comp2$min,average_pca$shapes$shapes.comp2$min)
+plotRefToTarget(average_pca$shapes$shapes.comp2$max,average_pca$shapes$shapes.comp2$max)
+dev.off()
+
+par(mfrow = c(1,2))
+plotRefToTarget(average_pca$shapes$shapes.comp3$min,average_pca$shapes$shapes.comp3$min) # Less telling 
+plotRefToTarget(average_pca$shapes$shapes.comp3$max,average_pca$shapes$shapes.comp3$max) # Less telling 
+dev.off()
+
+# IUCN colours for all species and not only those with diets.
+iucn_species <- factor(setNames(Traits$IUCN, paste(Traits$Genus,Traits$Species, sep = "_")),
+                       levels = c("CR","EN","VU","NT","LC")) # 30 taxa.
+iucn_colours <- setNames(c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50"), 
+                      levels(iucn_species))
+# Ecomorphology.
+ecomorph_species <- factor(setNames(Traits$Ecomorphotype, paste(Traits$Genus,Traits$Species, sep = "_")))
+ecomorph_colours <- setNames(c("#544948","#417865"),levels(ecomorph_species))
+
+# Main Habitats.
+habitat_species <- factor(setNames(Traits$Habitat, paste(Traits$Genus,Traits$Species, sep = "_")))
+habitat_colours <- setNames(c("#766253","#016895"),levels(habitat_species))
+
+# Secondary habitat.
+secondary_habitat_species <- factor(setNames(Traits$Secondary_Habitat, paste(Traits$Genus,Traits$Species, sep = "_")))
+secondary_colours <- setNames(c("#EDE8D0","black"),levels(secondary_habitat_species))
+
+# Tertiary habitat.
+sorenson_habitats <- factor(setNames(Traits$Sorensen_habitat, paste(Traits$Genus,Traits$Species, sep = "_")))
+
+# Body size class
+size_species <- factor(setNames(Traits$Size_Subclass, paste(Traits$Genus,Traits$Species, sep = "_")))
+size_colours <- setNames(c("#2D716F","#766253","#A6B168"),levels(size_species))
+
+# Serrations.
+serration_type <- 
+  Data |> 
+  select(Species,Serration) |> 
+  distinct(Species,.keep_all = T) |> 
+  mutate(Species = gsub(" ","_",Species)) |> 
+  mutate(Serration = stringr::str_squish(Serration)) |> 
+  as_tibble()
+
+# Phylomorphospace plot.
+layout(matrix(c(1:1)),respect = T)
+plot(average_pca, axis1 = 1, axis2 = 2,phylo = TRUE, main = NULL, 
+     cex = setNames(c(3.5,2.5,1.5),levels(size_species))[size_species[rownames(average_pca$x)]], 
+     pch = 21,asp = 2,col = "#2E2D29",
+     bg = iucn_colours[iucn_species[rownames(average_pca$x)]],font.lab = 2,cex.axis = .7,cex.lab = .7,
+     phylo.par= list(tip.labels = T, node.labels=FALSE, edge.color= "#2E2D29",
+                     edge.width= 1, tip.txt.cex =0.5,
+                     tip.txt.adj = c(-0.1, -0.1))
+     );minor.tick(nx = 2, ny = 2, tick.ratio = 0.5) # IUCN, body size and habitat.
+
+# Legends.
+legend("topleft",legend = names(iucn_colours),col = unname(iucn_colours),pch = 19,cex = .5,bty = "n")
+# Second legend.
+legend("topright",legend = names(size_colours)[c(3,2,1)],col = "black",pch = 21,
+       pt.cex = c(1.5,2.5,3.5),
+       bty = "n")
+
+# Use "|" for reef asscoiated, "-" for shelf-associated and + for coastal pelagic.
+pch_overlay <- 
+  ifelse(sorenson_habitats == "Reef", "|",
+       ifelse(sorenson_habitats == "Shelf", "-",
+              ifelse(sorenson_habitats == "Coastal pelagic", "+", NA)))
+
+habitat_symbol <- factor(setNames(object = pch_overlay, paste(Traits$Genus,Traits$Species, sep = "_")))
+
+par(new = T)
+points(average_pca$x[,1:2], pch = as.vector(unname(habitat_symbol[rownames(average_pca$x)])), col = "black", cex = 1.5)
+#points(average_pca$x[,c(1,3)], pch = as.vector(unname(habitat_symbol[rownames(average_pca$x)])), col = "black", cex = 1.5)
+
+# Boxplots.
+layout(matrix(c(1:2),nrow = 1,ncol = 2),widths = c(4,4),heights = c(7,7),respect = T)
+boxplot(average_pca$x[,1] ~ iucn_species[rownames(average_pca$x)],col = "white",border = "black",
+        frame.plot=F,boxwex=.8,staplewex=.5,boxlwd=2,medlwd=2,
+        ylab = expression(bold("PC1 (78.77%)")),
+        xlab = expression(bold("IUCN status")),outcol = scales::alpha("black",.5), outpch = 19,
+        notch = FALSE,xaxt="n");abline(h = mean(average_pca$x[,1]),lwd = 2, col = "black", lty = 2)
+
+boxplot(average_pca$x[,2] ~ iucn_species[rownames(average_pca$x)],col = "white",border = "black",
+        frame.plot=F,boxwex=.8,staplewex=.5,boxlwd=2,medlwd=2,
+        ylab = expression(bold("PC2 (9.31%)")),
+        xlab = expression(bold("IUCN status")),outcol = scales::alpha("black",.5), outpch = 19,
+        notch = FALSE,xaxt="n");abline(h = mean(average_pca$x[,2]),lwd = 2, col = "black", lty = 2)
+
+# Add text labels for groups on x-axis.
+axis(1, at = 1:5, labels = FALSE, tck = -0.02)
+text(x = 1:5, y = par()$usr[3] - 0.025*(par()$usr[4] - par()$usr[3]),
+     labels = names(iucn_colours), srt = 45, adj = 1, xpd = TRUE)
+```
+
+#### Linear models
+
+<!--Specimen-level analysis-->
+
+Here we ask if species differ in shape. The results show that shape differences are indeed influenced by species, tooth-type, and size. Among these, dignathic heterodonty is the strongest covariate after species identity.
+
+```{r}
+# Do species occupy different areas of morphospace?
+specimen_coords <- tooth_gpa$coords
+dimnames(specimen_coords)[[3]] <- gsub(" ", "-",x = gsub("_.*","", x = gsub("-"," ", dimnames(specimen_coords)[[3]])))
+
+# Define data frame.
+specimen_iucn <- 
+  as.data.frame(dimnames(specimen_coords)[[3]]) |> 
+  setNames(nm = "Species") |> 
+  left_join(Traits |> select(Genus,Species,IUCN) |> mutate(Species = paste0(Genus,"-",Species)),by = "Species") |> 
+  select(-2) |>
+  pull(IUCN)
+
+gdf_specimens <-
+  geomorph.data.frame(coords = specimen_coords,
+                      Csize = tooth_gpa$Csize,
+                      species = as.factor(gsub(" ", "-",x = gsub("_.*","", x = gsub("-"," ", dimnames(tooth_gpa$coords)[[3]])))),
+                      dignathic_heterodonty = as.factor(gsub(".*_([LU])[0-9]+\\.png$", "\\1",dimnames(tooth_gpa$coords)[[3]])),
+                      iucn = specimen_iucn
+                      )
+
+# Fit linear models.
+fit_01 <- procD.lm(coords ~ log(Csize) + species, data = gdf_specimens,
+                   print.progress = FALSE,RRPP = T, 
+                   iter = 999,seed = 1) # parallel slopes.
+
+fit_02 <- procD.lm(coords ~ log(Csize) * species, data = gdf_specimens,
+                   print.progress = FALSE,RRPP = T, 
+                   iter = 999,seed = 1) # different slopes (species-specific allometries)
+
+fit_03 <- procD.lm(coords ~ log(Csize) * species + dignathic_heterodonty, data = gdf_specimens,
+                    print.progress = FALSE,RRPP = T, 
+                    iter = 999,seed = 1)
+
+anova(fit_01)
+anova(fit_02)
+anova(fit_03) # This is the better model. Confirms that species are indeed different despite extensive overlap.
+
+# Are the IUCN categories different?
+fit_04 <- procD.lm(coords ~ iucn, data = gdf_specimens,
+                   print.progress = FALSE,RRPP = T, iter = 999,seed = 1)
+
+anova(fit_04) # Yes.
+
+# Pairwise test,
+summary(pairwise(fit = fit_04, groups = interaction(gdf_specimens$iucn)))
+```
+
+<!--Species-level analysis-->
+
+```{r message=FALSE,results='hide'}
+# Prepare centroid size.
+average_centroid <- centroid_size
+names(average_centroid) <- gsub("_.*","",names(average_centroid))
+
+avg_cz <- 
+  data.frame(species = names(average_centroid),
+             centroid = unname(average_centroid)
+  ) 
+
+ave_cz_transformed <-
+  aggregate(avg_cz$centroid,list(avg_cz$species),mean) |> 
+  mutate(x = log10(x))
+
+# Create new threat-status factor.
+new_threat <- 
+  iucn_species[rownames(average_pca$x)] |> 
+  as.data.frame() |> 
+  setNames(nm = "iucn") |> 
+  rownames_to_column(var = "Species") |> 
+  mutate(threat = case_when(iucn %in% c("CR","EN","VU") ~ "Threatened", T ~ "Not"))
+
+# Fit models.
+iucn_dataframe <- 
+  geomorph.data.frame(coords = species_subset,
+                      size = unname(setNames(ave_cz_transformed$x,ave_cz_transformed$Group.1)),
+                      iucn = as.factor(unname(iucn_species[rownames(average_pca$x)])),
+                      # Axes,
+                      pc1 = average_pca$x[,1],
+                      pc2 = average_pca$x[,2],
+                      # Simplified threat status.
+                      status = as.factor(new_threat$threat),
+                      habitat = as.factor(unname(sorenson_habitats[rownames(average_pca$x)])),
+                      body = as.factor(unname(size_species[rownames(average_pca$x)])),
+                      tree = carcharhinus_tree
+                      )
+# Model fits.
+fit_05 <- procD.lm(f1 = coords ~ 1,RRPP = T,data = iucn_dataframe, iter = 999)    # Baseline null model.
+fit_06 <- procD.lm(f1 = coords ~ iucn,RRPP = T,data = iucn_dataframe, iter = 999) # Ecological divergence, not accounting for allometry.
+
+anova(fit_05,fit_06)
+anova(fit_05)
+
+# Axis-specific.
+fit_07 <- procD.lm(pc1 ~ iucn,RRPP = T,data = iucn_dataframe, iter = 999)
+anova(fit_07)
+
+# Pairwise Comparisons.
+PW <- pairwise(fit_06, groups = interaction(iucn_dataframe$iucn))
+summary(PW)
+# Threatened versus not-treatened.
+fit_08 <- procD.lm(coords ~ status,RRPP = T,data = iucn_dataframe, iter = 999)
+anova(fit_08)
+```
+
+### Erosion of morphospace
+
+```{r}
+# CR species.
+cr <- c("Carcharhinus_borneensis","Carcharhinus_hemiodon","Carcharhinus_longimanus","Carcharhinus_porosus")
+
+# Endangered species.
+en <- c("Carcharhinus_acronotus","Carcharhinus_amblyrhynchos","Carcharhinus_dussumieri",
+        "Carcharhinus_leiodon","Carcharhinus_obscurus","Carcharhinus_perezii",
+        "Carcharhinus_plumbeus","Carcharhinus_signatus")
+
+# Vulnerable species.
+vu <- c("Carcharhinus_albimarginatus","Carcharhinus_amblyrhynchoides","Carcharhinus_amboinensis",
+        "Carcharhinus_brachyurus","Carcharhinus_brevipinna","Carcharhinus_falciformis",
+        "Carcharhinus_leucas","Carcharhinus_limbatus",
+        "Carcharhinus_melanopterus","Carcharhinus_sealei")
+
+# Near threatened species.
+nt <- c("Carcharhinus_altimus","Carcharhinus_isodon","Carcharhinus_macloti","Carcharhinus_sorrah")
+
+# Additive extinction effects.
+crEn <- c(cr,en)
+crEnVu <- c(cr,en,vu)
+crEnVunT <- c(cr,en,vu,nt) # This leaves only LC species alive.
+
+hull.0 <- grDevices::chull(average_pca$x[,1:2]) # Full dental morphospace.
+hull.1 <- grDevices::chull(average_pca$x[!rownames(average_pca$x) %in% cr,1:2])
+hull.2 <- grDevices::chull(average_pca$x[!rownames(average_pca$x) %in% crEn,1:2])
+hull.3 <- grDevices::chull(average_pca$x[!rownames(average_pca$x) %in% crEnVu,1:2])
+hull.4 <- grDevices::chull(average_pca$x[!rownames(average_pca$x) %in% crEnVunT,1:2])
+
+# PC1 vs PC2 vs Depth
+depth_akima <- interp(average_pca$x[,1], average_pca$x[,2], 
+                      setNames(Traits$Depth,paste(Traits$Genus,Traits$Species, sep = "_"))[rownames(average_pca$x)],
+                      linear = T, extrap = F) # Smooth raster grid mappigng depths onto the shape space.
+
+# Plot.
+# layout(matrix(c(1:4),ncol = 2,byrow = T),respect = T)
+
+plot(average_pca$x[,1:2], 
+     type = "n",
+     xlim = c(-0.2011419,0.1375744),ylim = c(-0.06607903,0.05046356),
+     xlab = "PC 1: 77.35%", ylab = "PC 2: 10.27%", 
+     font.lab = 2,cex.axis = .7,cex.lab = .7,);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# Depth profile.
+image(depth_akima, add=TRUE,col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+contour(depth_akima, add=TRUE,method = "edge",lwd = .5, col = "white")
+
+# contour(depth_akima, add=TRUE,method = "edge",lwd = .5, col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+
+# Ranges (minimum convex hulls)
+polygon(average_pca$x[,1:2][hull.0,],lty = 1,border = "#2E2D29",lwd = 2) # Full morphospace.
+
+polygon(average_pca$x[!rownames(average_pca$x) %in% cr,1:2][hull.1,],
+        lty = 1,border = "#2E2D29",lwd = 2) # CR eliminated.
+
+# Additive extinctions.
+polygon(average_pca$x[!rownames(average_pca$x) %in% crEn,1:2][hull.2,],
+        lty = 1,border = "#2E2D29",lwd = 2) # CR and EN eliminated
+
+polygon(average_pca$x[!rownames(average_pca$x) %in% crEnVu,1:2][hull.3,],
+        lty = 1,border = "#2E2D29",lwd = 2) # CR,EN, and VU eliminated
+
+polygon(average_pca$x[!rownames(average_pca$x) %in% crEnVunT,1:2][hull.4,],
+        lty = 1,border = "#2E2D29",lwd = 2) # CR,EN, VU, and NT eliminated
+
+# Centroids.
+c1 <- colMeans(average_pca$x[,c("Comp1", "Comp2")])
+c2 <- colMeans(average_pca$x[!rownames(average_pca$x) %in% cr,c("Comp1", "Comp2")])
+c3 <- colMeans(average_pca$x[!rownames(average_pca$x) %in% crEn,c("Comp1", "Comp2")])
+c4 <- colMeans(average_pca$x[!rownames(average_pca$x) %in% crEnVu,c("Comp1", "Comp2")])
+c5 <- colMeans(average_pca$x[!rownames(average_pca$x) %in% crEnVunT,c("Comp1", "Comp2")])
+
+# Add centroids.
+points(c1[1], c1[2], pch = 21, cex = 2, lwd = 2, col = "#2E2D29", bg = "white")
+points(c2[1], c2[2], pch = 21, cex = 2, lwd = 2, col = "#2E2D29",bg = "#d8cbb1") # CR removed.
+points(c3[1], c3[2], pch = 21, cex = 2, lwd = 2, col = "#2E2D29",bg = "#d8cbb1") # CR + EN
+points(c4[1], c4[2], pch = 21, cex = 2, lwd = 2, col = "#2E2D29",bg = "#d8cbb1") # CR + EN + VU
+points(c5[1], c5[2], pch = 21, cex = 2, lwd = 2, col = "#2E2D29",bg = "#d8cbb1") # CR + EN + VU + NT
+
+# Connecting lines
+lines(c(c1[1],c2[1]),c(c1[2],c2[2]), col="#2E2D29", lwd=2)
+lines(c(c1[1],c3[1]),c(c1[2],c3[2]), col="#2E2D29", lwd=2)
+lines(c(c1[1],c4[1]),c(c1[2],c4[2]), col="#2E2D29", lwd=2)
+lines(c(c1[1],c5[1]),c(c1[2],c5[2]), col="#2E2D29", lwd=2)
+
+# Add legend.
+# par(mfg = c(3, 2))
+# image.plot(depth_akima, col = colorRampPalette(c("#7f7f7f", "#417865"))(12),legend.only = T)
+```
+
+### Area loss
+
+```{r results='hide'}
+# How much of the volume is impacted? (FA = compute total area and volume) ... Only areas for 2D axes.
+data.frame(area = c(round(convhulln(average_pca$x[,1:2], options = "FA")$area,digits = 3),
+                    round(convhulln(average_pca$x[!rownames(average_pca$x) %in% cr,1:2], options = "FA")$area,digits = 3),
+                    round(convhulln(average_pca$x[!rownames(average_pca$x) %in% crEn,1:2], options = "FA")$area,digits = 3),
+                    round(convhulln(average_pca$x[!rownames(average_pca$x) %in% crEnVu,1:2], options = "FA")$area,digits = 3),
+                    round(convhulln(average_pca$x[!rownames(average_pca$x) %in% crEnVunT,1:2], options = "FA")$area,digits = 3)),
+           scenario = c("Baseline","CR","CR + EN","CR + EN + VU","CR + EN + VU + NT")
+) |> 
+  knitr::kable() |> 
+  kableExtra::kable_styling()
+
+# Proportion of area lost?
+round((0.740 - 0.629)/(0.740) * 100,digits = 2)     # 15%
+round((0.740 - 0.621)/(0.740) * 100,digits = 2)     # 16.08%
+round((0.740 - 0.551)/(0.740) * 100,digits = 2)     # 25.54%
+round((0.740 - 0.274)/(0.740) * 100,digits = 2)     # 62.97%
+
+# Eucldian distance.
+euclidean_distance <- 
+  function(pt1, pt2) {
+    return(sqrt((pt1[1] - pt2[1])^2 + (pt1[2] - pt2[2])^2))
+  }
+
+euclidean_distance(pt1 = unname(c1), pt2 = unname(c2))
+euclidean_distance(pt1 = unname(c1), pt2 = unname(c3))
+euclidean_distance(pt1 = unname(c1), pt2 = unname(c4))
+euclidean_distance(pt1 = unname(c1), pt2 = unname(c5))
+
+# Are the shifts statistically significant?
+ks.test(average_pca$x[,1],average_pca$x[!rownames(average_pca$x) %in% crEnVu,1])
+ks.test(average_pca$x[,2],average_pca$x[!rownames(average_pca$x) %in% crEnVu,2])
+```
+
+### Random extinction simulation
+
+```{r}
+# Extinction levels.
+extinction_levels <- c(4,12,22,26)  # CR, (CR + EN), (CR + EN + VU) and (CR + EN + VU + NT)
+
+q <- 100  
+
+simulated_spaces <- list()
+
+set.seed(1991)
+
+for(k in extinction_levels) {
+  for(i in 1:q) {
+    remove_species <- sample(rownames(average_pca$x[,1:2]), k)
+    reduced_space <- average_pca$x[,1:2][!rownames(average_pca$x[,1:2]) %in% remove_species, ]
+    
+    simulated_spaces[[paste0("remove_", k, "_sim_", i)]] <- reduced_space
+  }
+}
+
+# Results.
+extinction_results <-
+  bind_rows(lapply(simulated_spaces, colMeans), .id = "scenario") |> 
+  mutate(extinction = sub("_sim_.*", "", scenario)) |> 
+  mutate(extinction = factor(extinction, levels = c("remove_4","remove_12","remove_22","remove_26"))) |> 
+  as.data.frame()
+
+# Compute summary statistics based on PC1 and PC2.
+first_axis <- 
+  extinction_results |> 
+  group_by(extinction) |> 
+  summarise(mean = intervals(Comp1)$mean,
+            lwr_ci = intervals(Comp1)$Lower.CI,
+            upr_ci = intervals(Comp1)$Upper.CI,
+            var = "PC1")
+
+second_axis <- 
+  extinction_results |> 
+  group_by(extinction) |> 
+  summarise(mean = intervals(Comp2)$mean,
+            lwr_ci = intervals(Comp2)$Lower.CI,
+            upr_ci = intervals(Comp2)$Upper.CI,
+            var = "PC2")
+
+# Plot results.
+combined_results <- rbind(first_axis,second_axis)
+
+# layout(matrix(c(1,2,3,3),nrow = 2,ncol = 2),
+#        widths = c(6,6,7),heights = c(7,7,7),
+#        respect = T)
+
+layout(matrix(c(1:2),nrow = 1,ncol = 2),respect = T)
+
+plot(combined_results$mean[1:4], 
+     ylim = range(c(combined_results$lwr_ci[1:4], 0.08713091)), 
+     xlab = "Extinction Scenario",
+     ylab = expression(bar(PC1)), 
+     xaxt = "n",
+     bg = "white",font.lab = 2,
+     pch = 19);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# The observed (i.e. real) changes in mean value along PC1 and PC2 under each extinction scenario.
+points(1:4,c(c2[1],c3[1],c4[1],c5[1]),col = "#2659A4", pch = 19)
+# Add solid line for reference.
+abline(h = mean(average_pca$x[,1]),col = "#d8cbb1",lwd = 2)
+
+# Add error bars
+arrows(x0 = 1:4, y0 = combined_results$lwr_ci[1:4],
+       x1 = 1:4, y1 = combined_results$upr_ci[1:4],
+       angle = 90, code = 3, length = 0.05,lty = 1)
+
+# PC2.
+plot(combined_results$mean[5:8], 
+     ylim = range(c(combined_results$lwr_ci[5:8], 0.009)), 
+     xlab = "Extinction Scenario", 
+     ylab = expression(bar(PC2)),font.lab = 2,
+     bg = "white",
+     xaxt = "n",
+     pch = 19);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# The observed changes in mean value for PC2 under each extinction scenario
+points(1:4,c(c2[2],c3[2],c4[2],c5[2]),col = "#2659A4", pch = 19)
+
+abline(h = mean(average_pca$x[,2]),col = "#d8cbb1",lwd = 2)
+
+arrows(x0 = 1:4, y0 = combined_results$lwr_ci[5:8],
+       x1 = 1:4, y1 = combined_results$upr_ci[5:8],
+       angle = 90, code = 3, length = 0.05)
+```
+
+## Disparity analysis
+
+```{r}
+# Plot species richness.
+# par(mar = c(5,5,3,5))
+layout(matrix(c(1:1),ncol = 1),widths = 2,heights = 3,respect = T)
+
+plot(x = 1:5, y = c(30,26,18,8,4),ylab = "Species richness",
+     pch = 19,type = "b",xlab = "Extinction scenario",cex.axis = 0.8,cex.lab = 0.8,
+     font.lab = 2);abline(h = 30,lwd = 2,lty = 2);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# Plot pairwise Procrustes distance.
+par(new = TRUE)
+
+plot(c(
+  mean(as.matrix(dist(two.d.array(A = species_subset)))),
+  mean(as.matrix(dist(two.d.array(A = species_subset[,,!dimnames(species_subset)[[3]] %in% cr])))),
+  mean(as.matrix(dist(two.d.array(A = species_subset[,,!dimnames(species_subset)[[3]] %in% crEn])))),
+  mean(as.matrix(dist(two.d.array(A = species_subset[,,!dimnames(species_subset)[[3]] %in% crEnVu])))),
+  mean(as.matrix(dist(two.d.array(A = species_subset[,,!dimnames(species_subset)[[3]] %in% crEnVunT]))))
+  ), 
+  ylim = c(0.06,0.12),
+  xlab = "", ylab = "",type = "p",pch = 17, cex = 1,
+  col = c("black","#B71234","#B71234","#B71234","#B71234"),
+  xaxt = "n", yaxt = "n")
+
+axis(side = 4)
+mtext("Mean Pairwise Procrustes distance", side = 4, line = 3)
+
+# Simulate extinction at random.
+simulated_disparity <- list()
+
+set.seed(1992)
+
+# Will produce a nested array list (n = 100) with the matrix configuration of sampled species for each subsetted case.
+for(k in extinction_levels) {
+  level_results <- vector("list", q) # q = number of iterations.
+  for(i in 1:q) {
+    eS <- sample(dimnames(species_subset)[[3]], k) # sampling without replacement.
+    eP <- species_subset[,,!dimnames(species_subset)[[3]] %in% eS]
+    level_results[[i]] <- eP
+  }
+  simulated_disparity[[as.character(k)]] <- level_results
+}
+
+# 4 species going extinct at random.
+mean_results_1 <- vector(mode = "list")
+
+for(i in seq_along(simulated_disparity[[1]])) {
+  # Compute the mean Procrustes distance of each sample.
+  tr1 <- mean(as.matrix(dist(two.d.array(A = simulated_disparity[[1]][[i]])))) # First Scenario
+  mean_results_1[[i]] <- tr1
+  mean_results_1 <- unlist(mean_results_1)
+}
+
+# 12 species going extinct at random.
+mean_results_2 <- vector(mode = "list")
+
+for(i in seq_along(simulated_disparity[[2]])) {
+  tr2 <- mean(as.matrix(dist(two.d.array(A = simulated_disparity[[2]][[i]])))) # Second Scenario
+  mean_results_2[[i]] <- tr2
+  mean_results_2 <- unlist(mean_results_2)
+}
+
+# 22 species going extinct at random.
+mean_results_3 <- vector(mode = "list")
+
+for(i in seq_along(simulated_disparity[[3]])) {
+  tr3 <- mean(as.matrix(dist(two.d.array(A = simulated_disparity[[3]][[i]])))) # Third Scenario
+  mean_results_3[[i]] <- tr3
+  mean_results_3 <- unlist(mean_results_3)
+}
+
+# 24 species going extinct at random.
+mean_results_4 <- vector(mode = "list")
+
+for(i in seq_along(simulated_disparity[[4]])) {
+  tr4 <- mean(as.matrix(dist(two.d.array(A = simulated_disparity[[4]][[i]])))) # Fourth Scenario
+  mean_results_4[[i]] <- tr4
+  mean_results_4 <- unlist(mean_results_4)
+}
+
+# Combine results.
+APPD <- 
+  cbind(mean_results_1,mean_results_2,mean_results_3,mean_results_4) |> 
+  as.data.frame() |> 
+  setNames(nm = c("remove_4","remove_12","remove_22","remove_26")) |> 
+  pivot_longer(cols = c(1:4),names_to = "extinction") |> 
+  # Estimate CI intervals around mean distributions.
+  group_by(extinction) |> 
+  summarise(mean =   intervals(value)$mean,
+            lwr_ci = intervals(value)$Lower.CI,
+            upr_ci = intervals(value)$Upper.CI
+            ) |> 
+  ungroup() |> 
+  mutate(extinction = factor(extinction, levels = c("remove_4","remove_12","remove_22","remove_26"))) |> 
+  # Add dummy row.
+  add_row(extinction = "remove_none", mean = NA, lwr_ci = NA, upr_ci = NA)
+
+# par(new = TRUE)
+# plot(APPD_res$mean[c(5,4,1:3)],
+#      ylim = range(c(APPD_res$lwr_ci, APPD_res$upr_ci),na.rm = T), 
+#      xlab = "", ylab = "",type = "p",pch = 17, cex = 1,
+#      col = "lightblue",
+#      xaxt = "n", yaxt = "n")
+
+arrows(
+  x0 = 1:5, y0 = APPD$lwr_ci[c(5,4,1:3)],
+  x1 = 1:5, y1 = APPD$upr_ci[c(5,4,1:3)],
+  angle = 90, code = 3, length = 0.05,col = "#009AB4",
+)
+
+points(APPD$mean[c(5,4,1:3)],pch = 17, col = "#009AB4")
+
+# Add legend.
+legend("bottomleft",legend = c("Species Diveristy","APPD","Randomized-APPD"),
+       col = c("black","#B71234","#009AB4"),
+       pch = c(19,17,17),cex = .8)
+
+#axis(side = 4, line = 4)
+#mtext("Simulated Extinction", side = 4, line = 6)
+```
+
+## Sensitivity analyses
+
+```{r}
+# Species average based on upper and lower teeth.
+jaw_coords <- tooth_gpa$coords
+
+dimnames(jaw_coords)[[3]] <- gsub("-"," ",dimnames(jaw_coords)[[3]])         # Remove the dash between genus and species name.
+dimnames(jaw_coords)[[3]] <- gsub("_U", "_Upper",dimnames(jaw_coords)[[3]])  # Substitute upper case U and L with Upper and Lower. 
+dimnames(jaw_coords)[[3]] <- gsub("_L", "_Lower",dimnames(jaw_coords)[[3]])
+dimnames(jaw_coords)[[3]] <- gsub("[0-9]+", "", dimnames(jaw_coords)[[3]])   # Remove alphanumerical values.
+# Lastly remove anything that contains this text string: _Bass et al _Pl.
+dimnames(jaw_coords)[[3]] <- gsub("|_Bass et al _Pl|_Bass et al _Pla", "", dimnames(jaw_coords)[[3]])
+
+# Computing an average shape.
+jaw_subset <- coords.subset(A = jaw_coords, group = as.factor(dimnames(jaw_coords)[[3]]))
+
+jaw_subset <- 
+  lapply(jaw_subset, mshape) |>
+  simplify2array()
+
+# dim(jaw_subset) # 60 configurations.
+
+# Final pre-processing.
+upper_jaw_coords <- jaw_subset[,,grep(pattern = "Upper",x = dimnames(jaw_subset)[[3]],value = T)]
+lower_jaw_coords <- jaw_subset[,,grep(pattern = "Lower",x = dimnames(jaw_subset)[[3]],value = T)]
+
+dimnames(upper_jaw_coords)[[3]] <- gsub("_.*","",x = dimnames(upper_jaw_coords)[[3]])
+dimnames(upper_jaw_coords)[[3]] <- gsub(" ","_", x = dimnames(upper_jaw_coords)[[3]])
+
+dimnames(lower_jaw_coords)[[3]] <- gsub("_.*","",x = dimnames(lower_jaw_coords)[[3]])
+dimnames(lower_jaw_coords)[[3]] <- gsub(" ","_", x = dimnames(lower_jaw_coords)[[3]])
+
+# PCA.
+average_upper_jaw <- gm.prcomp(A = upper_jaw_coords,phy = carcharhinus_tree)
+average_lower_jaw <- gm.prcomp(A = lower_jaw_coords,phy = carcharhinus_tree)
+
+# Serration type for upper teeth by species.
+upper_serrations_frame <- 
+  Data |> 
+  filter(Jaw == "Upper") |> 
+  select(Species,Serration) |> 
+  distinct(Species,.keep_all = T) |> 
+  mutate(Species = gsub(" ","_",Species)) |> 
+  mutate(Serration = stringr::str_squish(Serration)) |> 
+  as_tibble()
+
+lower_serrations_frame <- 
+  Data |> 
+  filter(Jaw == "Lower") |> 
+  select(Species,Serration) |> 
+  distinct(Species,.keep_all = T) |> 
+  mutate(Species = gsub(" ","_",Species)) |> 
+  mutate(Serration = stringr::str_squish(Serration)) |> 
+  as_tibble()
+
+# Plot upper dental configurations.
+layout(matrix(c(1:1)),respect = T)
+plot(average_upper_jaw, axis1 = 1, axis2 = 2,phylo = TRUE, main = NULL, 
+     cex = setNames(c(3.5,2.5,1.5),levels(size_species))[size_species[rownames(average_upper_jaw$x)]], 
+     pch = 21,asp = 2,col = "#2E2D29",
+     bg = iucn_colours[iucn_species[rownames(average_upper_jaw$x)]],font.lab = 2,cex.axis = .7,cex.lab = .7,
+     phylo.par= list(tip.labels = T, node.labels=FALSE, edge.color= "#2E2D29",
+                     edge.width= 1, tip.txt.cex =0.5,
+                     tip.txt.adj = c(-0.1, -0.1))
+     ); minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+par(new = T)
+points(average_upper_jaw$x[,1:2], pch = as.vector(unname(habitat_symbol[rownames(average_upper_jaw$x)])), col = "black", cex = 1.5)
+
+plot(average_lower_jaw, axis1 = 1, axis2 = 2,phylo = TRUE, main = NULL,
+     # Serrations.
+     # lwd =c(4,2,1,.5)[as.factor(setNames(lower_serrations_frame$Serration,lower_serrations_frame$Species))],
+     # Body size.
+     cex = setNames(c(3.5,2.5,1.5),levels(size_species))[size_species[rownames(average_pca$x)]], 
+     pch = 21,asp = 2,col = "#2E2D29",
+     # IUCN status.
+     bg = iucn_colours[iucn_species[rownames(average_pca$x)]],font.lab = 2,cex.axis = .7,cex.lab = .7,
+     phylo.par= list(tip.labels = T, node.labels=FALSE, edge.color= "#2E2D29",
+                     edge.width= 1, tip.txt.cex =0.5,
+                     tip.txt.adj = c(-0.1, -0.1))
+     ); minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+par(new = T)
+points(average_lower_jaw$x[,1:2], pch = as.vector(unname(habitat_symbol[rownames(average_lower_jaw$x)])), col = "black", cex = 1.5)
+dev.off()
+
+par(mfrow = c(1,2))
+plotRefToTarget(average_upper_jaw$shapes$shapes.comp1$min,average_upper_jaw$shapes$shapes.comp1$min)
+plotRefToTarget(average_upper_jaw$shapes$shapes.comp1$max,average_upper_jaw$shapes$shapes.comp1$max)
+plotRefToTarget(average_upper_jaw$shapes$shapes.comp2$min,average_upper_jaw$shapes$shapes.comp2$min)
+plotRefToTarget(average_upper_jaw$shapes$shapes.comp2$max,average_upper_jaw$shapes$shapes.comp2$max)
+# 
+plotRefToTarget(average_lower_jaw$shapes$shapes.comp1$min,average_lower_jaw$shapes$shapes.comp1$min)
+plotRefToTarget(average_lower_jaw$shapes$shapes.comp1$max,average_lower_jaw$shapes$shapes.comp1$max)
+plotRefToTarget(average_lower_jaw$shapes$shapes.comp2$min,average_lower_jaw$shapes$shapes.comp2$min)
+plotRefToTarget(average_lower_jaw$shapes$shapes.comp2$max,average_lower_jaw$shapes$shapes.comp2$max)
+# dev.off()
+
+# ANOVA.
+gdf_sensitivity <- 
+  geomorph.data.frame(
+    upper_coords = upper_jaw_coords,
+    lower_coords = lower_jaw_coords,
+    status = 
+      dimnames(upper_jaw_coords)[[3]] |> 
+      as.data.frame() |> setNames(nm = "Species") |> 
+      left_join(Traits |> select(Genus,Species,IUCN) |> mutate(Species = paste0(Genus,"_",Species)),by = "Species") |> 
+      select(-2) |> 
+      pull(IUCN)
+    )
+
+fit_09 <- procD.lm(f1 = upper_coords ~ status,RRPP = T,data = gdf_sensitivity, iter = 999)
+anova(fit_09)
+
+fit_10 <- procD.lm(f1 = lower_coords ~ status,RRPP = T,data = gdf_sensitivity, iter = 999)
+anova(fit_10)
+```
+
+<!--Erosion of morphospace based on upper teeth-->
+
+```{r}
+hull.5 <- grDevices::chull(average_upper_jaw$x[,1:2]) # Full dental morphospace.
+hull.6 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% cr,1:2])
+hull.7 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% crEn,1:2])
+hull.8 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% crEnVu,1:2])
+hull.9 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% crEnVunT,1:2])
+
+# PC1 vs PC2 vs Depth
+depth_akima_upper <- interp(average_upper_jaw$x[,1], average_upper_jaw$x[,2], 
+                            setNames(Traits$Depth,paste(Traits$Genus,Traits$Species, sep = "_"))[rownames(average_upper_jaw$x)],
+                            linear = T, extrap = F) # Smooth raster grid mappigng depths onto the shape space.
+
+# Plot.
+# layout(matrix(c(1:4),ncol = 2,byrow = T),respect = T)
+
+plot(average_upper_jaw$x[,1:2],
+     type = "n", main = "Erosion of morphospace",sub = "Upper Teeth",
+     xlim = c(-0.1865064,0.1530878),ylim = c(-0.05455346,0.08755696),
+     xlab = "PC 1: 77.35%", ylab = "PC 2: 10.27%", 
+     font.lab = 2,cex.axis = .7,cex.lab = .7,);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# Depth profile.
+image(depth_akima_upper, add=TRUE,col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+contour(depth_akima_upper, add=TRUE,method = "edge",lwd = .5, col = "white")
+
+# contour(depth_akima, add=TRUE,method = "edge",lwd = .5, col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+
+# Ranges (minimum convex hulls)
+polygon(average_upper_jaw$x[,1:2][hull.5,],lty = 1,border = "#2E2D29",lwd = 2) # Full morphospace.
+
+polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% cr,1:2][hull.6,],
+        lty = 1,border = "#B71234",lwd = 2) # CR eliminated.
+
+# Additive extinctions.
+# polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEn,1:2][hull.7,],
+#         lty = 1,border = "#2E2D29",lwd = 2) # CR and EN eliminated
+
+# polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVu,1:2][hull.8,],
+#         lty = 1,border = "#2E2D29",lwd = 2) # CR,EN, and VU eliminated
+
+polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2][hull.9,],
+        lty = 2,border = "#4CAF50",lwd = 2) # CR,EN, VU, and NT eliminated
+
+points(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2], col = "orange",pch = 19, cex = 3)
+text(x = average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1],
+     y = average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,2],
+     labels = names(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1]),
+     col = "black", cex = .5, font.lab = 2)
+```
+
+## Procrustes variance
+
+```{r warning=FALSE,message=TRUE,results='hide'}
+# Within-group disparity.
+within_grp_PV <- morphol.disparity(f1 = coords ~ 1,groups = ~ species,iter = 999,data = gdf_specimens,print.progress = F)
+
+pv_01 <- within_grp_PV$Procrustes.var |> 
+  as.data.frame() |> 
+  setNames(nm = "PV") |> 
+  rownames_to_column(var = "Species") |> 
+  mutate(Species = gsub("-"," ", Species)) |> 
+  left_join(y = Traits |> select(Genus,Species,IUCN,Size_Subclass,Sorensen_habitat) |> mutate(Species = paste0(Genus," ",Species)),by = "Species") |> 
+  select(-3) 
+
+# summary(aov(formula = pv_01$PV ~ pv_01$Size_Subclass))    # Signifiacnt.
+# summary(aov(formula = pv_01$PV ~ pv_01$Sorensen_habitat)) # Not Signifiacnt.
+# summary(aov(formula = pv_01$PV ~ pv_01$IUCN))             # Not Signifiacnt.
+
+# TukeyHSD(x = aov(formula = pv_01$PV ~ pv_01$Size_Subclass))
+
+# Disparity within species and jaws.
+within_dignathic_PV <- morphol.disparity(f1 = coords ~ 1,groups = ~ species+dignathic_heterodonty,iter = 999,data = gdf_specimens,print.progress = F)
+
+p17  <- 
+  within_dignathic_PV$Procrustes.var |> 
+  as.data.frame() |> 
+  setNames(nm = "PV") |> 
+  rownames_to_column(var = "Species") |> 
+  mutate(Jaw = Species,
+         Jaw = sub("^[^.]*\\.", "", Jaw),
+         Jaw = as.factor(Jaw)) |> 
+  mutate(Jaw = case_when(Jaw == "U" ~ "Upper",
+                         Jaw == "L" ~ "Lower", T ~ Jaw)) |> 
+  mutate(Jaw = factor(Jaw, levels = c("Upper","Lower"))) |> 
+  mutate(Species = gsub("-"," ",Species)) |> 
+  mutate(Species = gsub(".U|.L","",Species)) |> 
+  left_join(y = Traits |> select(Genus,Species,IUCN,Size_Subclass,Sorensen_habitat) |> mutate(Species = paste0(Genus," ",Species)),by = "Species") |> 
+  # Plot.
+  ggplot(mapping = aes(x = PV, y = Species, fill = Jaw)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  scale_fill_manual(values =  c("#417865","#2E2D29")) +
+  scale_color_manual(values = c("#417865","#2E2D29")) +
+  # Labels.
+  labs(x = "Procrustes Variance", y = NULL, title = "Within-species disparity") +
+  theme_bw() +
+  theme(aspect.ratio = 2,
+        panel.grid = element_blank(),
+        axis.title = element_text(face = "bold",size = 10),
+        legend.position = "none",
+        legend.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold",size = 12),
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(face = "italic"))
+
+p17 |> print()
+
+p18 <-  
+  pv_01 |> 
+  select(c(1,3:5)) |> 
+  mutate(Size_Subclass = gsub("_shark","",Size_Subclass)) |> 
+  mutate(Size_Subclass = case_when(Size_Subclass == "small" ~ "small (<150 cm)",
+                                   Size_Subclass == "medium" ~ "medium (150–300 cm)",
+                                   Size_Subclass == "large" ~ "large (>300 cm)", T  ~ Size_Subclass)) |> 
+  mutate(Size_Subclass = factor(Size_Subclass, levels = c("small (<150 cm)","medium (150–300 cm)","large (>300 cm)"))) |> 
+  ggplot(aes(x = Sorensen_habitat, y = Species)) +
+  geom_point(aes(size = Size_Subclass, color = IUCN)) +
+  scale_size_manual(values = c(3,6,9)) +
+  scale_color_manual(values = c("LC"="#4CAF50","NT"="#A0A831","VU"="#FDC82F","EN"="#E98300","CR"="#B71234")) +
+  labs(x = "Habitat", y = NULL,size = "Size Class",color = "IUCN Status") +
+  theme_bw() +
+  theme(aspect.ratio = 2,
+        panel.grid = element_blank(),
+        axis.title = element_text(face = "bold",size = 10),
+        legend.position = "right",
+        legend.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold",size = 12),
+        axis.text = element_text(size = 8),
+        axis.text.y = element_text(face = "italic"))
+
+p18 |> print()
+
+# Overall mean.
+pv_iucn <- morphol.disparity(f1 = coords ~ 1,groups = ~ iucn,iter = 999,data = gdf_specimens)
+# Plot.
+layout(matrix(c(1:2),ncol = 2,byrow = T),widths = c(3,3),heights = c(4,4),respect = T)
+
+pv_iucn$Procrustes.var[c(1:2,5,4,3)] |> 
+  barplot(col = "#333F48FF",horiz = T,xlab = "Procrustes variance",font.lab = 2,cex.axis = .7,cex.lab = .7)
+
+# pv_iucn$PV.dist.Pval
+
+mdp.1 = tooth_gpa$coords[,,setdiff(dimnames(tooth_gpa$coords)[[3]],rownames(Data[Data$Species %in% gsub("_"," ",cr),]))]      # Excludes CR.
+mdp.2 = tooth_gpa$coords[,,setdiff(dimnames(tooth_gpa$coords)[[3]],rownames(Data[Data$Species %in% gsub("_"," ",crEn),]))]    # Excludes CR % EN
+mdp.3 = tooth_gpa$coords[,,setdiff(dimnames(tooth_gpa$coords)[[3]],rownames(Data[Data$Species %in% gsub("_"," ",crEnVu),]))]  # Excludes CR % EN & VU
+mdp.4 = tooth_gpa$coords[,,setdiff(dimnames(tooth_gpa$coords)[[3]],rownames(Data[Data$Species %in% gsub("_"," ",crEnVunT),]))] # Excludes CR % EN & VU & NT.
+
+morphol.disparity(f1 = coords ~ 1,groups = NULL,iter = 999,data = gdf_specimens,print.progress = F) # Baseline.
+morphol.disparity(f1 = mdp.1 ~ 1,groups = NULL,iter = 999,print.progress = F)
+morphol.disparity(f1 = mdp.2 ~ 1,groups = NULL,iter = 999,print.progress = F)
+morphol.disparity(f1 = mdp.3 ~ 1,groups = NULL,iter = 999,print.progress = F)
+morphol.disparity(f1 = mdp.4 ~ 1,groups = NULL,iter = 999,print.progress = F)
+
+plot(x = c(1:5), y = c(0.03936576,0.03858905,0.03680784,0.04104313,0.03527784),
+     type = "o",
+     xlab = "Extinction Scenaros",
+     ylab = "Procrustes variance",
+     pch = 19,
+     font.lab = 2,
+     cex.axis = .7,
+     cex.lab = .7);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+```
+
+## Phylogenetic signal
+
+```{r message=FALSE, results='hide'}
+# Test for phylogenetic signal in tooth shape.
+carcharhinus_signal <- geomorph::physignal(A = species_subset,phy = carcharhinus_tree,iter = 999,seed = 1,print.progress = F)
+# Any difference between upper and lower teeth?
+upper_signal <- geomorph::physignal(A = upper_jaw_coords,phy = carcharhinus_tree,iter = 999,seed = 1,print.progress = F)
+lower_signal <- geomorph::physignal(A = lower_jaw_coords,phy = carcharhinus_tree,iter = 999,seed = 1,print.progress = F)
+
+# Effect size.
+carcharhinus_effect <- geomorph::physignal.z(A = species_subset,phy = carcharhinus_tree)
+upper_effect <- geomorph::physignal.z(A = upper_jaw_coords,phy = carcharhinus_tree)
+lower_effect <- geomorph::physignal.z(A = lower_jaw_coords,phy = carcharhinus_tree)
+
+# Compare the signal across all three sets.
+ps_list <- list(carcharhinus_effect, upper_effect,lower_effect); names(ps_list) <- c("combined", "upper","lower")
+# summary(compare.physignal.z(ps_list))
+```
+
+## Ecological diversity {#eco-div}
+
+```{r}
+d1 <- vegdist(x = as.matrix(unclass(clr(acomp(closed_diets)))[,1:10]), method = "euclidean") # All.
+# Re-calculate after elimination of CR, EN, VU, and NT.
+d2 <- vegdist(x = as.matrix(unclass(clr(acomp(closed_diets[!rownames(closed_diets) %in% cr,])))[,1:10]), method = "euclidean") # CR
+d3 <- vegdist(x = as.matrix(unclass(clr(acomp(closed_diets[!rownames(closed_diets) %in% crEn,])))[,1:10]), method = "euclidean") # CR + EN
+d4 <- vegdist(x = as.matrix(unclass(clr(acomp(closed_diets[!rownames(closed_diets) %in% crEnVu,])))[,1:10]), method = "euclidean") # CR + EN + VU
+d5 <- vegdist(x = as.matrix(unclass(clr(acomp(closed_diets[!rownames(closed_diets) %in% crEnVunT,])))[,1:10]), method = "euclidean") # CR + EN + VU + NT
+
+# Multivariate homogeneity of groups dispersion.
+bd0 <- betadisper(d1, group = Diets$IUCN_2024)
+
+ex0 <- betadisper(d1, group = as.factor(rep("A",27)))
+ex1 <- betadisper(d2, group = as.factor(rep("A",25)))
+ex2 <- betadisper(d3, group = as.factor(rep("A",18)))
+ex3 <- betadisper(d4, group = as.factor(rep("A",8)))
+ex4 <- betadisper(d5, group = as.factor(rep("A",4)))
+
+bd0$distances |> 
+  as.data.frame() |> 
+  setNames(nm = "Distance") |> 
+  rownames_to_column(var = "Species") |> 
+  left_join(Traits |> select(Genus, Species, IUCN,Size_Subclass) |> mutate(Species = paste(Genus,Species,sep = "_")),by = "Species") |> 
+  mutate(IUCN = factor(IUCN, levels = c("CR","EN","VU","NT","LC"))) |> 
+  mutate("Body-size" = Size_Subclass) |> 
+  as_tibble() |> 
+  ggplot(mapping = aes(x = IUCN, y = Distance)) +
+  geom_boxplot(outlier.shape = NA, width=.8) +
+  geom_jitter(aes(colour = `Body-size`),size = 2.5) +
+  scale_fill_manual(values =    c("#333F48FF","#C6AA76FF","#BA0C2FFF")) + 
+  scale_colour_manual(values =  c("#333F48FF","#C6AA76FF","#BA0C2FFF")) + 
+  theme_bw() +
+  theme(legend.position = "top",aspect.ratio = 1) # measuring directional change in ecological space.
+
+# Plot diet results.
+layout(matrix(c(1,1,1,2,3,4), nrow = 2, byrow = TRUE),
+       widths = c(3,3,3), 
+       heights = c(6,4),
+       respect = TRUE)
+
+par(mar = c(2,4,4,2))
+phylo.heatmap(tree = tree_diets, X = Diets[,6:15], standardize = F,
+              colors = rev(sequential_hcl(11,palette = "Red-Yellow")),split=c(0.6,0.4),
+              fsize = .5) # Overwheling fish-eaters across the board.
+
+# ODB.
+par(mar = c(5, 4, 2, 1))
+plot(x = odb_results$Index,y = odb_results$Axis,
+     cex = setNames(c(3.5,2.5,1.5),levels(size_species))[size_species[odb_results$Species]], 
+     pch = 21,col = "#2E2D29",
+     bg = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50")[iucn_categories],
+     font.lab = 2,cex.axis = .7,cex.lab = .7)
+
+par(new = T)
+points(x = odb_results$Index,y = odb_results$Axis, pch = as.vector(unname(habitat_symbol[odb_results$Species])),
+       col = "black", cex = 1.5)
+# Add quantiles.
+abline(h = c(quantile(odb_results$Axis, c(0.33, 0.66))),col = "grey50", lty = 2) # or 0.025 and 0.975 
+
+# text(x = odb_results$Index,y = odb_results$Axis,labels = odb_results$Species,cex = .5)
+
+boxplot(bd0, col = "white",border = c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50"),
+        boxwex=.8,staplewex=.5,boxlwd=2,medlwd=2)
+
+points(jitter(as.numeric(bd0$group)), bd0$distances, 
+       col = scales::alpha(c("#B71234","#E98300","#FDC82F","#A0A831","#4CAF50"),.5)[bd0$group],
+       pch = 19)
+
+# bd0$distances |> 
+#   as.data.frame() |> 
+#   setNames(nm = "value") |> 
+#   rownames_to_column(var = "Species") |> 
+#   left_join(Traits |> select(Genus,Species, IUCN) |> mutate(Species = paste(Genus,Species,sep = "_")), by = "Species") |> 
+#   filter(IUCN == "VU") |> 
+#   arrange(desc(value))
+
+mean_dispersion <-
+  c(mean(ex0$distances),
+    mean(ex1$distances),
+    mean(ex2$distances),
+    mean(ex3$distances),
+    mean(ex4$distances)
+    )
+
+plot(x = 1:5,y = mean_dispersion,type = "o",lwd = 2,ylim = c(0,7),
+     pch = 19, ylab = "Mean ecological dispersion",
+     font.lab = 2)
+
+grp_sd <- c(
+  sd(ex0$distances),
+  sd(ex1$distances),
+  sd(ex2$distances),
+  sd(ex3$distances),
+  sd(ex4$distances)
+)
+
+arrows(
+  x0 = 1:5, y0 = mean_dispersion - grp_sd,
+  x1 = 1:5, y1 = mean_dispersion + grp_sd,
+  angle = 90, code = 3, length = 0.05, lwd = 1.5
+)
+
+# Is there a relationship between IUCN status and ODB values?
+# summary(aov(odb_results$Axis ~ odb_results$IUCN)) # No.
+# summary(aov(odb_results$Axis ~ odb_results$Sorensen_habitat)) # Habitat, no.
+# summary(aov(odb_results$Axis ~ odb_results$Size_Subclass)) # Body size, yes. Which one? Large versus small sharks have difference values.
+
+# TukeyHSD(aov(odb_results$Axis ~ odb_results$Size_Subclass), conf.level=.95)
+
+# PERMANOVA.
+# adonis2(dist(bd0$distances) ~ bd0$group)
+```
+
+## Download data
+
+{{< downloadthis Carcharhinus.xlsx dname="Carcharhinus information dataset" label="Download Carcharhinus data used in this study as .xlsx" icon="file-earmark-spreadsheet" type="success" >}}
+{{< downloadthis Diets.xlsx dname="Carcharhinus diets" label="Download Carcharhinus diets as .xlsx" icon="file-earmark-spreadsheet" type="success" >}}
+{{< downloadthis Traits.xlsx dname="Carcharhinus traits" label="Download Carcharhinus traits as .xlsx" icon="file-earmark-spreadsheet" type="success" >}}
+
+::: {#call2 .callout-note appearance="simple"}
+## Data statement
+
+The compositional diet data of _Carcharhinus_ species analysed herein was compiled by E. Cortes. Future use of this dataset should credit the original source (see Reference list). Conversely, our trait dataset combines information from mulitple sources, including the primary literature and the IUCN Red List database. The original sources should be cited where appropriate.
+:::
