@@ -1621,6 +1621,7 @@ anova(fit_10)
 <!--Erosion of morphospace based on upper teeth-->
 
 ```{r}
+# Upper tooth configurations.
 hull.5 <- grDevices::chull(average_upper_jaw$x[,1:2]) # Full dental morphospace.
 hull.6 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% cr,1:2])
 hull.7 <- grDevices::chull(average_upper_jaw$x[!rownames(average_upper_jaw$x) %in% crEn,1:2])
@@ -1633,23 +1634,24 @@ depth_akima_upper <- interp(average_upper_jaw$x[,1], average_upper_jaw$x[,2],
                             linear = T, extrap = F) # Smooth raster grid mappigng depths onto the shape space.
 
 # Plot.
-# layout(matrix(c(1:4),ncol = 2,byrow = T),respect = T)
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=TRUE)
 
 plot(average_upper_jaw$x[,1:2],
      type = "n", main = "Erosion of morphospace",sub = "Upper Teeth",
-     xlim = c(-0.1865064,0.1530878),ylim = c(-0.05455346,0.08755696),
-     xlab = "PC 1: 77.35%", ylab = "PC 2: 10.27%", 
+     xlim = c(-0.1865064,0.1530878),
+     ylim = c(-0.05455346,0.08755696),
+     xlab = "PC 1: 61.19%", ylab = "PC 2: 18.53%", 
      font.lab = 2,cex.axis = .7,cex.lab = .7,);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
 
 # Depth profile.
 image(depth_akima_upper, add=TRUE,col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
 contour(depth_akima_upper, add=TRUE,method = "edge",lwd = .5, col = "white")
 
-# contour(depth_akima, add=TRUE,method = "edge",lwd = .5, col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+# Legend.
+image.plot(depth_akima_upper, col = colorRampPalette(c("#7f7f7f", "#417865"))(12),legend.only = T)
 
 # Ranges (minimum convex hulls)
 polygon(average_upper_jaw$x[,1:2][hull.5,],lty = 1,border = "#2E2D29",lwd = 2) # Full morphospace.
-
 polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% cr,1:2][hull.6,],
         lty = 1,border = "#B71234",lwd = 2) # CR eliminated.
 
@@ -1661,12 +1663,67 @@ polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% cr,1:2][hull.6,],
 #         lty = 1,border = "#2E2D29",lwd = 2) # CR,EN, and VU eliminated
 
 polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2][hull.9,],
-        lty = 2,border = "#4CAF50",lwd = 2) # CR,EN, VU, and NT eliminated
+        lty = 2,border = "#FEB868",lwd = 2) # CR,EN, VU, and NT eliminated
 
-points(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2], col = "orange",pch = 19, cex = 3)
+points(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2], bg = "#FEB868",pch = 21, cex = 3)
 text(x = average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1],
      y = average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,2],
      labels = names(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1]),
+     col = "#CF7878", cex = .5, font.lab = 2)
+```
+
+<!--Erosion of morphospace based on lower teeth-->
+
+```{r}
+# Lower tooth configurations.
+hull.10 <- grDevices::chull(average_lower_jaw$x[,1:2]) # Full dental morphospace.
+hull.11 <- grDevices::chull(average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% cr,1:2])
+hull.12 <- grDevices::chull(average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEn,1:2])
+hull.13 <- grDevices::chull(average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEnVu,1:2])
+hull.14 <- grDevices::chull(average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEnVunT,1:2])
+
+# PC1 vs PC2 vs Depth.
+depth_akima_lower <- interp(average_lower_jaw$x[,1], average_lower_jaw$x[,2], 
+                            setNames(Traits$Depth,paste(Traits$Genus,Traits$Species, sep = "_"))[rownames(average_lower_jaw$x)],
+                            linear = T, extrap = F)
+
+# Plot.
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=TRUE)
+
+plot(average_lower_jaw$x[,1:2],
+     type = "n", main = "Erosion of morphospace",sub = "Lower Teeth",
+     xlim = c(-0.2184150,0.2357515),
+     ylim = c(-0.04958307,0.06523407),
+     xlab = "PC 1: 82.52%", ylab = "PC 2: 9.64%", 
+     font.lab = 2,cex.axis = .7,cex.lab = .7,);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# Depth profile.
+image(depth_akima_lower, add=TRUE,col = colorRampPalette(c("#7f7f7f", "#417865"))(12))
+contour(depth_akima_lower, add=TRUE,method = "edge",lwd = .5, col = "white")
+
+# Legend.
+image.plot(depth_akima_lower, col = colorRampPalette(c("#7f7f7f", "#417865"))(12),legend.only = T)
+
+# Ranges (minimum convex hulls)
+polygon(average_lower_jaw$x[,1:2][hull.10,],lty = 1,border = "#2E2D29",lwd = 2) # Full morphospace.
+polygon(average_lower_jaw$x[!rownames(average_pca$x) %in% cr,1:2][hull.11,],
+        lty = 1,border = "#B71234",lwd = 2) # CR eliminated.
+
+# Additive extinctions.
+# polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEn,1:2][hull.7,],
+#         lty = 1,border = "#2E2D29",lwd = 2) # CR and EN eliminated
+
+# polygon(average_upper_jaw$x[!rownames(average_pca$x) %in% crEnVu,1:2][hull.8,],
+#         lty = 1,border = "#2E2D29",lwd = 2) # CR,EN, and VU eliminated
+
+polygon(average_lower_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2][hull.14,],
+        lty = 2,border = "#FEB868",lwd = 2) # CR,EN, VU, and NT eliminated.
+
+
+points(average_lower_jaw$x[!rownames(average_pca$x) %in% crEnVunT,1:2], col = "#FEB868",pch = 19, cex = 3)
+text(x = average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEnVunT,1],
+     y = average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEnVunT,2],
+     labels = names(average_lower_jaw$x[!rownames(average_lower_jaw$x) %in% crEnVunT,1]),
      col = "black", cex = .5, font.lab = 2)
 ```
 
@@ -1913,6 +1970,56 @@ arrows(
 
 # PERMANOVA.
 # adonis2(dist(bd0$distances) ~ bd0$group)
+```
+
+## Morphology versus ODB
+
+```{r}
+# Relationship between shape and ODB.
+# summary(lm(average_pca$x[odb_results$Species,1] ~ odb_results$Axis)) # No.
+# summary(lm(average_pca$x[odb_results$Species,2] ~ odb_results$Axis)) # Yes. Inverse relationship.
+
+# Upper teeth
+# summary(lm(average_upper_jaw$x[odb_results$Species,1] ~ odb_results$Axis)) # No.
+# summary(lm(average_upper_jaw$x[odb_results$Species,2] ~ odb_results$Axis)) # Yes. Inverse relationship. 
+
+# Lower teeth
+# summary(lm(average_lower_jaw$x[odb_results$Species,1] ~ odb_results$Axis)) # No.
+# summary(lm(average_lower_jaw$x[odb_results$Species,2] ~ odb_results$Axis)) # No.
+
+# PC1 vs PC2 vs ODB.
+odb_akima <- interp(average_pca$x[odb_results$Species,1],
+                    average_pca$x[odb_results$Species,2],
+                    odb_results$Axis, 
+                    linear = T, 
+                    extrap = F)
+# Plot.
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=TRUE)
+# layout(matrix(c(1:1)),respect = T)
+
+plot(average_pca$x[odb_results$Species,1:2], 
+     type = "n",
+     xlim = c(-0.1435757,0.1375744),
+     ylim = c(-0.06607903,0.03859228),
+     xlab = "PC 1: 77.35%", ylab = "PC 2: 10.27%", 
+     font.lab = 2,cex.axis = .7,cex.lab = .7,);minor.tick(nx = 2, ny = 2, tick.ratio = 0.5)
+
+# Depth profile.
+image(odb_akima, add=TRUE,col = colorRampPalette(c("#EBEBEB", "#704C68"))(12))
+contour(odb_akima, add=TRUE,method = "edge",lwd = .5, col = "white")
+# Legend.
+image.plot(odb_akima, col = colorRampPalette(c("#EBEBEB", "#704C68"))(12),legend.only = T)
+# Show species.
+points(average_pca$x[odb_results$Species,1:2], 
+       pch = 21,
+       col = "black",bg = "white",
+       cex = 1.5)
+
+text(x = average_pca$x[odb_results$Species,1],
+     y = average_pca$x[odb_results$Species,2],
+     labels = gsub("Carcharhinus","C.",x =  gsub("_"," ",names(average_pca$x[odb_results$Species,1]))),
+     col = "black", cex = 1, offset = 2,
+     font.lab = 2)
 ```
 
 ## Download data
