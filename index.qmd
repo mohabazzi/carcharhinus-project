@@ -37,6 +37,9 @@ other-links:
   - text: Zenado
     icon: file-code
     href: https://doi.org/10.5281/zenodo.17109671
+  - text: Dockerhub
+    icon: file-code
+    href: https://hub.docker.com/r/mohamadbazzi/carcharhinus-image
 code-links:
   - text: Github Repo
     icon: github
