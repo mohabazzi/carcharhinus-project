@@ -57,9 +57,9 @@ This Quarto report accompanies the manuscript **Extinction Threatens to Cause Mo
 ## Packages
 
 ```{r message=FALSE, warning=FALSE, results='hide', echo=FALSE}
-R.packages <- c("geomorph openxlsx dplyr ggplot2 phytools geiger phangorn tibble geometry
-                 colorspace compositions Momocs ggpubr ordiBreadth tidyr akima Hmisc ggpointdensity
-                 boot broom rredlist treemap ggrepel dispRity fields abind forcats ggtern")
+R.packages <- c("geomorph RRPP openxlsx dplyr ggplot2 phytools geiger phangorn tibble geometry reshape
+                 colorspace compositions ggpubr ordiBreadth tidyr akima Hmisc ggpointdensity conflicted
+                 boot broom rredlist treemap ggrepel dispRity fields abind forcats knitr kableExtra")
 
 import_packages <- 
   function(x)
@@ -84,6 +84,10 @@ intervals <- function(xvar,alpha = 0.975) {
   names(res) <- c('mean','st.dev','N','t.stat','Lower.CI','Upper.CI','Lower.PI','Upper.PI')
   return(res)
 }
+
+conflict_prefer("rename", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("dist", "stats")
 ```
 
 ## Data
@@ -350,12 +354,12 @@ carcharhinidae_tree <- treedata(phy = tree,
 plotTree(ladderize(carcharhinus_tree),fsize = .8)
 
 # Fully Resolved Trees (Stein et al. 2018).
-fully_resolved_tree <- readNexus(file = "Phylogeny/10.cal.tree.nex")
+# fully_resolved_tree <- readNexus(file = "Phylogeny/10.cal.tree.nex")
 
 # The calibrated tree (Marion et al. )
-marion_et_al_2024 <- readNexus(file = "Phylogeny/16FC_16C_374_sp.tree") 
-marion_et_al_2024$tip.label[69]  <- "Carcharhinus_perezii"
-marion_et_al_2024_pruned <- treedata(phy = marion_et_al_2024,data = species_tips, warnings = FALSE)$phy # 27 Carcharhinus species.
+# marion_et_al_2024 <- readNexus(file = "Phylogeny/16FC_16C_374_sp.tree") 
+# marion_et_al_2024$tip.label[69]  <- "Carcharhinus_perezii"
+# marion_et_al_2024_pruned <- treedata(phy = marion_et_al_2024,data = species_tips, warnings = FALSE)$phy # 27 Carcharhinus species.
 ```
 
 ## Diets and niche breadth
@@ -460,7 +464,7 @@ p2 <-
   rownames_to_column(var = "taxa") |> 
   mutate(taxa = gsub("_"," ", taxa),
          taxa = gsub("Carcharhinus","C.", taxa)) |> 
-  reshape::melt() |> 
+  melt() |> 
   ggplot(aes(x= "", y=value, fill=variable)) +
   geom_bar(stat="identity", width=.01, color="black") +
   scale_fill_manual(values = colorspace::qualitative_hcl(n = 10,palette = "Dark 3")) +
@@ -1261,8 +1265,8 @@ data.frame(area = c(round(convhulln(average_pca$x[,1:2], options = "FA")$area,di
                     round(convhulln(average_pca$x[!rownames(average_pca$x) %in% crEnVunT,1:2], options = "FA")$area,digits = 3)),
            scenario = c("Baseline","CR","CR + EN","CR + EN + VU","CR + EN + VU + NT")
 ) |> 
-  knitr::kable() |> 
-  kableExtra::kable_styling()
+  kable() |> 
+  kable_styling()
 
 # Proportion of area lost?
 round((0.740 - 0.629)/(0.740) * 100,digits = 2)     # 15%
