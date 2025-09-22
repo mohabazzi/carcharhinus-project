@@ -2012,7 +2012,7 @@ plot(average_pca$x[odb_results$Species,1:2],
 image(odb_akima, add=TRUE,col = colorRampPalette(c("#EBEBEB", "#704C68"))(12))
 contour(odb_akima, add=TRUE,method = "edge",lwd = .5, col = "white")
 # Legend.
-image.plot(odb_akima, col = colorRampPalette(c("#EBEBEB", "#704C68"))(12),legend.only = T)
+image.plot(odb_akima,col = colorRampPalette(c("#EBEBEB", "#704C68"))(12),legend.only = T)
 # Show species.
 points(average_pca$x[odb_results$Species,1:2], 
        pch = 21,
