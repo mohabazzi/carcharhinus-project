@@ -1947,6 +1947,7 @@ mean_dispersion <-
     mean(ex4$distances)
     )
 
+# Plot.
 plot(x = 1:5,y = mean_dispersion,type = "o",lwd = 2,ylim = c(0,7),
      pch = 19, ylab = "Mean ecological dispersion",
      font.lab = 2)
